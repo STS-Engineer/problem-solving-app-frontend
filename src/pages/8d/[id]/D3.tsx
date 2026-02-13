@@ -131,7 +131,6 @@ export default function D3({ onRefreshSteps }: { onRefreshSteps: () => void }) {
   const [isolated, setIsolated] = useState(false);
   const [identified, setIdentified] = useState(false);
 
-  // ✅ When backend data loads, reflect it in the existing local states
   useEffect(() => {
     const d = data?.defected_part_status;
     if (!d) return;
