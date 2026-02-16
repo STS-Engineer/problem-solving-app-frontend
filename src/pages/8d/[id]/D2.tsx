@@ -2,7 +2,6 @@
 import { useStepData } from "../../../hooks/useStepData";
 import StepLayout from "../../StepLayout";
 import { STEPS } from "../../../lib/steps";
-import ValidationFeedback from "../../../components/ValidationFeedback";
 import { ValidationResult } from "../../../services/api/reports";
 
 interface FourW2H {
