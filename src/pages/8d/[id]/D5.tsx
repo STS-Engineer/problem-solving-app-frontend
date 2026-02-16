@@ -2,25 +2,21 @@ import StepLayout from "../../StepLayout";
 import { STEPS } from "../../../lib/steps";
 import { useStepData } from "../../../hooks/useStepData";
 
-interface CorrectiveAction {
+interface CorrectiveActionD5 {
   action: string;
   responsible: string;
   due_date: string;
-  imp_date: string;
-  evidence: string;
 }
 
 interface D5FormData {
-  corrective_actions_occurrence: CorrectiveAction[];
-  corrective_actions_detection: CorrectiveAction[];
+  corrective_actions_occurrence: CorrectiveActionD5[];
+  corrective_actions_detection: CorrectiveActionD5[];
 }
 
-const emptyAction: CorrectiveAction = {
+const emptyAction: CorrectiveActionD5 = {
   action: "",
   responsible: "",
   due_date: "",
-  imp_date: "",
-  evidence: "",
 };
 
 export default function D5({ onRefreshSteps }: { onRefreshSteps: () => void }) {
@@ -44,19 +40,11 @@ export default function D5({ onRefreshSteps }: { onRefreshSteps: () => void }) {
     const filteredData = {
       corrective_actions_occurrence: data.corrective_actions_occurrence.filter(
         (action) =>
-          action.action.trim() ||
-          action.responsible.trim() ||
-          action.due_date ||
-          action.imp_date ||
-          action.evidence.trim(),
+          action.action.trim() || action.responsible.trim() || action.due_date,
       ),
       corrective_actions_detection: data.corrective_actions_detection.filter(
         (action) =>
-          action.action.trim() ||
-          action.responsible.trim() ||
-          action.due_date ||
-          action.imp_date ||
-          action.evidence.trim(),
+          action.action.trim() || action.responsible.trim() || action.due_date,
       ),
     };
 
@@ -77,9 +65,10 @@ export default function D5({ onRefreshSteps }: { onRefreshSteps: () => void }) {
     await handleSubmit();
     onRefreshSteps();
   };
+
   const updateOccurrenceAction = (
     index: number,
-    field: keyof CorrectiveAction,
+    field: keyof CorrectiveActionD5,
     value: string,
   ) => {
     const updated = [...data.corrective_actions_occurrence];
@@ -89,7 +78,7 @@ export default function D5({ onRefreshSteps }: { onRefreshSteps: () => void }) {
 
   const updateDetectionAction = (
     index: number,
-    field: keyof CorrectiveAction,
+    field: keyof CorrectiveActionD5,
     value: string,
   ) => {
     const updated = [...data.corrective_actions_detection];
@@ -159,11 +148,11 @@ export default function D5({ onRefreshSteps }: { onRefreshSteps: () => void }) {
             <table className="table w-full">
               <thead>
                 <tr>
-                  <th className="min-w-[250px] bg-blue-50">Action</th>
+                  <th className="min-w-[250px] bg-blue-50">
+                    Corrective Action for Occurrence
+                  </th>
                   <th className="min-w-[150px] bg-green-50">Responsible</th>
                   <th className="min-w-[130px] bg-amber-50">Due Date</th>
-                  <th className="min-w-[130px] bg-purple-50">Imp Date</th>
-                  <th className="min-w-[200px] bg-indigo-50">Evidence</th>
                   <th className="min-w-[80px]">Actions</th>
                 </tr>
               </thead>
@@ -207,34 +196,6 @@ export default function D5({ onRefreshSteps }: { onRefreshSteps: () => void }) {
                           updateOccurrenceAction(
                             index,
                             "due_date",
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="bg-purple-50/30">
-                      <input
-                        type="date"
-                        className="w-full font-medium"
-                        value={action.imp_date}
-                        onChange={(e) =>
-                          updateOccurrenceAction(
-                            index,
-                            "imp_date",
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="bg-indigo-50/30">
-                      <input
-                        placeholder="Evidence file/reference..."
-                        className="w-full font-medium"
-                        value={action.evidence}
-                        onChange={(e) =>
-                          updateOccurrenceAction(
-                            index,
-                            "evidence",
                             e.target.value,
                           )
                         }
@@ -287,11 +248,11 @@ export default function D5({ onRefreshSteps }: { onRefreshSteps: () => void }) {
             <table className="table w-full">
               <thead>
                 <tr>
-                  <th className="min-w-[250px] bg-blue-50">Action</th>
+                  <th className="min-w-[250px] bg-blue-50">
+                    Corrective Action for Detection
+                  </th>
                   <th className="min-w-[150px] bg-green-50">Responsible</th>
                   <th className="min-w-[130px] bg-amber-50">Due Date</th>
-                  <th className="min-w-[130px] bg-purple-50">Imp Date</th>
-                  <th className="min-w-[200px] bg-indigo-50">Evidence</th>
                   <th className="min-w-[80px]">Actions</th>
                 </tr>
               </thead>
@@ -331,34 +292,6 @@ export default function D5({ onRefreshSteps }: { onRefreshSteps: () => void }) {
                           updateDetectionAction(
                             index,
                             "due_date",
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="bg-purple-50/30">
-                      <input
-                        type="date"
-                        className="w-full font-medium"
-                        value={action.imp_date}
-                        onChange={(e) =>
-                          updateDetectionAction(
-                            index,
-                            "imp_date",
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="bg-indigo-50/30">
-                      <input
-                        placeholder="Evidence file/reference..."
-                        className="w-full font-medium"
-                        value={action.evidence}
-                        onChange={(e) =>
-                          updateDetectionAction(
-                            index,
-                            "evidence",
                             e.target.value,
                           )
                         }
