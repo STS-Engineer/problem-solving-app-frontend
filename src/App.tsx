@@ -15,8 +15,13 @@ import D5 from "./pages/8d/[id]/D5";
 import D6 from "./pages/8d/[id]/D6";
 import D7 from "./pages/8d/[id]/D7";
 import D8 from "./pages/8d/[id]/D8";
-import { getStepsByComplaintId } from "./services/api/reports";
+import {
+  getStepsByComplaintId,
+  getStepValidation,
+  ValidationResult,
+} from "./services/api/reports";
 import { Toaster } from "react-hot-toast";
+import Dashboard from "./pages/Dashboard";
 
 const INDUSTRIAL_COLORS = {
   primary: "#2C3E50",
@@ -33,7 +38,14 @@ const INDUSTRIAL_COLORS = {
 };
 
 type StepStatus = "draft" | "submitted" | "validated" | "rejected";
-type StepsState = Record<StepCode, { status: StepStatus }>;
+
+// 🆕 Extended step state to include step_id
+interface StepState {
+  status: StepStatus;
+  step_id: number;
+}
+
+type StepsState = Record<StepCode, StepState>;
 
 function EightDShell() {
   const { complaintId, step } = useParams<{
@@ -46,26 +58,66 @@ function EightDShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
 
+  // 🆕 Validation state
+  const [validation, setValidation] = useState<ValidationResult | null>(null);
+  const [validationLoading, setValidationLoading] = useState(false);
+
+  // Steps state
+  const [steps, setSteps] = useState<StepsState | null>(null);
+  const [stepsLoading, setStepsLoading] = useState(true);
+
   if (!complaintIdNum || Number.isNaN(complaintIdNum)) {
     return <div>❌ Invalid complaint ID</div>;
   }
 
   const stepCode = (step ?? "D1") as StepCode;
 
-  const [steps, setSteps] = useState<StepsState | null>(null);
-  const [stepsLoading, setStepsLoading] = useState(true);
+  // 🆕 Load validation for current step
+  const loadValidation = async (stepId: number) => {
+    try {
+      setValidationLoading(true);
+      const validationData = await getStepValidation(stepId);
+      setValidation(validationData);
+    } catch (error) {
+      console.log("No validation found for this step yet");
+      setValidation(null);
+    } finally {
+      setValidationLoading(false);
+    }
+  };
 
+  // Load steps from API
   const loadSteps = async () => {
     try {
       setStepsLoading(true);
-      const res = await getStepsByComplaintId(complaintIdNum);
-      console.log(res);
+      const stepsArray = await getStepsByComplaintId(complaintIdNum); // Already returns array
+      console.log("Steps loaded:", stepsArray);
+
       const formatted = {} as StepsState;
-      res.steps.forEach((s: any) => {
-        formatted[s.step_code as StepCode] = { status: s.status as StepStatus };
+      stepsArray.forEach((s: any) => {
+        // Changed from res.steps to stepsArray
+        formatted[s.step_code as StepCode] = {
+          status: s.status as StepStatus,
+          step_id: s.id,
+        };
       });
 
       setSteps(formatted);
+
+      // 🆕 Load validation for current step if it exists and is validated/rejected
+      const currentStepData = stepsArray.find(
+        // Changed from res.steps
+        (s: any) => s.step_code === stepCode,
+      );
+      if (
+        currentStepData &&
+        (currentStepData.status === "validated" ||
+          currentStepData.status === "rejected")
+      ) {
+        loadValidation(currentStepData.id);
+      } else {
+        setValidation(null);
+      }
     } catch (e) {
       console.error("Error loading steps:", e);
       setSteps(null);
@@ -73,31 +125,42 @@ function EightDShell() {
       setStepsLoading(false);
     }
   };
-
+  // Reload steps when complaint or step changes
   useEffect(() => {
     loadSteps();
-  }, [complaintIdNum]);
+  }, [complaintIdNum, stepCode]);
 
+  // 🆕 Function to update validation (called from child components)
+  const handleValidationUpdate = (newValidation: ValidationResult | null) => {
+    setValidation(newValidation);
+  };
+
+  // Render the appropriate step component
   const Page = useMemo(() => {
+    const commonProps = {
+      onRefreshSteps: loadSteps,
+      onValidationUpdate: handleValidationUpdate, // 🆕 Pass validation updater
+    };
+
     switch (stepCode) {
       case "D1":
-        return <D1 onRefreshSteps={loadSteps} />;
+        return <D1 {...commonProps} />;
       case "D2":
-        return <D2 onRefreshSteps={loadSteps} />;
+        return <D2 {...commonProps} />;
       case "D3":
-        return <D3 onRefreshSteps={loadSteps} />;
+        return <D3 {...commonProps} />;
       case "D4":
-        return <D4 onRefreshSteps={loadSteps} />;
+        return <D4 {...commonProps} />;
       case "D5":
-        return <D5 onRefreshSteps={loadSteps} />;
+        return <D5 {...commonProps} />;
       case "D6":
-        return <D6 onRefreshSteps={loadSteps} />;
+        return <D6 {...commonProps} />;
       case "D7":
-        return <D7 onRefreshSteps={loadSteps} />;
+        return <D7 {...commonProps} />;
       case "D8":
-        return <D8 onRefreshSteps={loadSteps} />;
+        return <D8 {...commonProps} />;
       default:
-        return <D1 onRefreshSteps={loadSteps} />;
+        return <D1 {...commonProps} />;
     }
   }, [stepCode]);
 
@@ -231,6 +294,7 @@ function EightDShell() {
             step={stepCode}
             isCollapsed={chatCollapsed}
             onToggle={() => setChatCollapsed(!chatCollapsed)}
+            validation={validation}
           />
         </div>
       </div>
@@ -247,6 +311,7 @@ export default function App() {
 
       <Route path="/8d/:complaintId/:step" element={<EightDShell />} />
 
+      <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/8d" element={<Navigate to="/" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
