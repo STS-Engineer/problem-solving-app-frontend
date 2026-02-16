@@ -1,4 +1,6 @@
+// src/components/ChatCoach.tsx
 import { StepCode } from "../lib/steps";
+import { ValidationResult } from "../services/api/reports";
 
 const INDUSTRIAL_COLORS = {
   primary: "#2C3E50",
@@ -17,59 +19,57 @@ type CoachMessage = {
   suggestion?: string;
 };
 
-const sampleByStep: Record<StepCode, CoachMessage[]> = {
+// Static guidelines for each step (shown at top)
+const staticGuidelinesByStep: Record<StepCode, CoachMessage[]> = {
   D1: [
     {
-      type: "ok",
-      time: "10:12",
-      title: "Team validated",
+      type: "note",
+      time: "—",
+      title: "Expected Requirements",
       bullets: [
-        "Leader identified",
-        "Production + Quality roles present",
-        "Authority confirmed",
+        "Team leader clearly identified",
+        "At least 2 team members (Production + Quality)",
+        "Each member has defined role and authority",
+        "Cross-functional representation",
       ],
     },
   ],
   D2: [
     {
-      type: "ok",
-      time: "11:40",
-      title: "Description validated",
-      bullets: ["Standard cited", "IS/IS NOT complete", "Evidence attached"],
+      type: "note",
+      time: "—",
+      title: "Expected Requirements",
+      bullets: [
+        "Complete 4W2H description (What, Where, When, Who, How, How Many)",
+        "Standard or specification referenced",
+        "IS / IS NOT analysis completed",
+        "Evidence and quantified data provided",
+      ],
     },
   ],
   D3: [
     {
       type: "note",
-      time: "09:12",
-      title: "Reminder (strict coach)",
+      time: "—",
+      title: "Expected Requirements",
       bullets: [
-        "Document NOK containment + suspect parts",
-        "Define sorting/certification method before restart",
-        "Trace the alert (reference) and recipients",
+        "Defective parts contained (returned/isolated/identified)",
+        "100% sorting completed if customer impact",
+        "Production restart conditions defined",
+        "Customer notification documented",
       ],
-    },
-    {
-      type: "fail",
-      time: "09:13",
-      title: "Blocking points detected",
-      bullets: [
-        "No evidence of 100% sorting (if customer defect / escape risk).",
-        "Production restart: authorization/conditions incomplete.",
-        "Containment results not filled in (quantities, status).",
-      ],
-      suggestion:
-        "Complete the results (sorted qty, NOK qty), attach the delivery note/certificate, then relaunch 'Check & Validate'.",
     },
   ],
   D4: [
     {
       type: "note",
       time: "—",
-      title: "Expected",
+      title: "Expected Requirements",
       bullets: [
-        "5 Why (occurrence + non-detection)",
-        "Validation of the cause (repro/test/data)",
+        "Root cause for OCCURRENCE identified (5 Why)",
+        "Root cause for NON-DETECTION identified (5 Why)",
+        "Both causes validated with evidence",
+        "Physical verification or testing performed",
       ],
     },
   ],
@@ -77,27 +77,38 @@ const sampleByStep: Record<StepCode, CoachMessage[]> = {
     {
       type: "note",
       time: "—",
-      title: "Expected",
-      bullets: ["1 action per root cause", "Owner + due date + evidence"],
+      title: "Expected Requirements",
+      bullets: [
+        "1 corrective action per root cause (minimum)",
+        "Each action has: responsible + due date",
+        "Actions target both occurrence AND detection",
+        "Measurable and verifiable actions",
+      ],
     },
   ],
   D6: [
     {
       type: "note",
       time: "—",
-      title: "Expected",
-      bullets: ["Monitoring (qty, scrap)", "Shopfloor checklist + audit"],
+      title: "Expected Requirements",
+      bullets: [
+        "Implementation evidence provided",
+        "Monitoring metrics defined (qty, scrap rate)",
+        "Shop floor verification checklist completed (≥50%)",
+        "Audit performed and documented",
+      ],
     },
   ],
   D7: [
     {
       type: "note",
       time: "—",
-      title: "Expected",
+      title: "Expected Requirements",
       bullets: [
-        "Replication",
-        "Update WI/CP/PFMEA",
-        "Lesson learned + LT monitoring",
+        "Lessons learned documented",
+        "Replication plan to other products/processes",
+        "Standards updated (WI/CP/PFMEA)",
+        "Long-term monitoring plan established",
       ],
     },
   ],
@@ -105,15 +116,102 @@ const sampleByStep: Record<StepCode, CoachMessage[]> = {
     {
       type: "note",
       time: "—",
-      title: "Expected",
+      title: "Expected Requirements",
       bullets: [
-        "Conclusion",
-        "Customer satisfaction (if applicable)",
-        "All steps validated",
+        "Closure statement summarizing the case",
+        "All previous steps validated",
+        "Customer satisfaction confirmed (if applicable)",
+        "Team recognition and sign-off",
       ],
     },
   ],
 };
+
+// Convert validation result to messages
+function validationToMessages(validation: ValidationResult): CoachMessage[] {
+  const messages: CoachMessage[] = [];
+  const now = new Date().toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  // Overall assessment message
+  if (validation.decision === "pass") {
+    messages.push({
+      type: "ok",
+      time: now,
+      title: "✅ Validation Passed",
+      bullets: [validation.overall_assessment],
+    });
+  } else {
+    messages.push({
+      type: "fail",
+      time: now,
+      title: "⚠️ Validation Failed",
+      bullets: [validation.overall_assessment],
+    });
+  }
+
+  // Missing fields
+  if (validation.missing_fields?.length > 0) {
+    messages.push({
+      type: "fail",
+      time: now,
+      title: "❌ Missing Required Fields",
+      bullets: validation.missing_fields,
+    });
+  }
+
+  // Quality issues
+  if (validation.quality_issues?.length > 0) {
+    messages.push({
+      type: "fail",
+      time: now,
+      title: "⚠️ Quality Issues",
+      bullets: validation.quality_issues,
+    });
+  }
+
+  // Rules violations
+  if (validation.rules_violations?.length > 0) {
+    messages.push({
+      type: "fail",
+      time: now,
+      title: "🚨 20 Rules Violations",
+      bullets: validation.rules_violations,
+    });
+  }
+
+  // Suggestions
+  if (validation.suggestions?.length > 0) {
+    messages.push({
+      type: "note",
+      time: now,
+      title: "💡 Recommendations",
+      bullets: validation.suggestions,
+    });
+  }
+
+  // Field improvements
+  if (
+    validation.field_improvements &&
+    Object.keys(validation.field_improvements).length > 0
+  ) {
+    const improvements = Object.entries(validation.field_improvements).map(
+      ([field, improvement]) =>
+        `${field.replace(/_/g, " ").toUpperCase()}: ${improvement}`,
+    );
+    messages.push({
+      type: "note",
+      time: now,
+      title: "✨ Suggested Improvements",
+      bullets: improvements,
+    });
+  }
+
+  return messages;
+}
 
 function getMessageStyle(type: CoachMessage["type"]) {
   if (type === "ok") {
@@ -144,14 +242,23 @@ interface ChatCoachProps {
   step: StepCode;
   isCollapsed: boolean;
   onToggle: () => void;
+  validation?: ValidationResult | null;
 }
 
 export default function ChatCoach({
   step,
   isCollapsed,
   onToggle,
+  validation,
 }: ChatCoachProps) {
-  const messages = sampleByStep[step] ?? [];
+  // Static guidelines (always shown at top)
+  const staticGuidelines = staticGuidelinesByStep[step] ?? [];
+
+  // Validation messages (shown below guidelines after validation)
+  const validationMessages = validation ? validationToMessages(validation) : [];
+
+  // Combine: static guidelines first, then validation results
+  const allMessages = [...staticGuidelines, ...validationMessages];
 
   return (
     <aside
@@ -296,8 +403,76 @@ export default function ChatCoach({
             background: "linear-gradient(135deg, #F8F9FA 0%, #FFFFFF 100%)",
           }}
         >
-          {messages.map((m, idx) => {
+          {/* Validation status banner (if validation exists) */}
+          {validation && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: 16,
+                background:
+                  validation.decision === "pass"
+                    ? "linear-gradient(135deg, #27AE60 0%, #1E8449 100%)"
+                    : "linear-gradient(135deg, #E74C3C 0%, #C0392B 100%)",
+                borderRadius: 12,
+                color: "white",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  marginBottom: 8,
+                }}
+              >
+                <div
+                  style={{
+                    width: 32,
+                    height: 32,
+                    background: "rgba(255,255,255,0.2)",
+                    borderRadius: 8,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 18,
+                  }}
+                >
+                  {validation.decision === "pass" ? "✅" : "⚠️"}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {validation.decision === "pass"
+                      ? "Validation Passed"
+                      : "Improvements Needed"}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.9,
+                    }}
+                  >
+                    {new Date().toLocaleTimeString("en-US", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: false,
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* All messages (static + validation) */}
+          {allMessages.map((m, idx) => {
             const style = getMessageStyle(m.type);
+            const isStatic = idx < staticGuidelines.length;
 
             return (
               <div
@@ -310,6 +485,8 @@ export default function ChatCoach({
                   borderLeft: `6px solid ${style.border}`,
                   borderRadius: 12,
                   boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                  opacity: isStatic && validation ? 0.7 : 1, // Dim static guidelines when validation exists
+                  transition: "opacity 0.3s ease",
                 }}
               >
                 <div
@@ -446,7 +623,7 @@ export default function ChatCoach({
             padding: "16px 8px",
           }}
         >
-          {messages.map((m, idx) => {
+          {allMessages.map((m, idx) => {
             const style = getMessageStyle(m.type);
             return (
               <div
@@ -480,40 +657,6 @@ export default function ChatCoach({
             background: "white",
           }}
         >
-          <button
-            style={{
-              width: "100%",
-              padding: "14px 20px",
-              borderRadius: 8,
-              border: "none",
-              background: "linear-gradient(135deg, #4A7CFF 0%, #2C5FE0 100%)",
-              color: "white",
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-              boxShadow: "0 4px 12px rgba(74, 124, 255, 0.3)",
-              transition: "all 0.2s ease",
-              marginBottom: 16,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.boxShadow =
-                "0 6px 16px rgba(74, 124, 255, 0.4)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow =
-                "0 4px 12px rgba(74, 124, 255, 0.3)";
-            }}
-          >
-            <span style={{ fontSize: 18 }}>✨</span>
-            <span>Check & Validate</span>
-          </button>
-
           <div
             style={{
               display: "flex",
