@@ -59,14 +59,13 @@ export default function NewComplaint() {
         !formData.avocarbon_plant ||
         !formData.product_line
       ) {
-        throw new Error("Veuillez remplir tous les champs obligatoires");
+        throw new Error("Please fill in all required fields");
       }
       console.log("Données du formulaire:", formData);
       let result;
 
       // Créer avec rapport 8D
       result = await createComplaintWith8D(formData);
-      console.log("Réclamation créée avec rapport 8D:", result);
       toast.success("Complaint created successfully!");
 
       // Rediriger vers D1 - le rapport a été créé automatiquement
