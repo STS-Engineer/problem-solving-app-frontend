@@ -29,8 +29,7 @@ const staticGuidelinesByStep: Record<StepCode, CoachMessage[]> = {
       bullets: [
         "Team leader clearly identified",
         "At least 2 team members (Production + Quality)",
-        "Each member has defined role and authority",
-        "Cross-functional representation",
+        "Each member has defined role",
       ],
     },
   ],
