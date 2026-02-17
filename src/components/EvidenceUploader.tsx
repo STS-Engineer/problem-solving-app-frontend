@@ -4,7 +4,6 @@
  * Accepts images (jpg, png, gif, webp, bmp, tiff) and PDFs only.
  * Files are uploaded immediately on selection and stored in the DB.
  */
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteStepFile,
@@ -13,6 +12,7 @@ import {
   StepFileRecord,
   uploadStepFile,
 } from "../services/api/stepFiles";
+import toast from "react-hot-toast";
 
 // ─── Design tokens (matches your app palette) ────────────────────────────────
 const C = {
@@ -26,7 +26,7 @@ const C = {
   bgLight: "#F8F9FA",
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants ───────────────────────────────────────────────────────────────
 const ACCEPTED_MIME = [
   "image/jpeg",
   "image/png",
@@ -40,7 +40,7 @@ const ACCEPT_ATTR = ACCEPTED_MIME.join(",");
 const MAX_MB = 25;
 const MAX_BYTES = MAX_MB * 1024 * 1024;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 interface UploadingItem {
   localId: string;
   filename: string;
@@ -54,7 +54,74 @@ interface Props {
   onChange?: (files: StepFileRecord[]) => void;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Toast-based confirm helper ──────────────────────────────────────────────
+/**
+ * Shows an inline toast with Confirm / Cancel buttons.
+ * Returns a Promise<boolean> — resolves true if the user clicks Confirm.
+ */
+function toastConfirm(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    toast(
+      (t) => (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            minWidth: 220,
+          }}
+        >
+          <span style={{ fontSize: 14, color: C.primary }}>{message}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => {
+                toast.dismiss(t.id);
+                resolve(true);
+              }}
+              style={{
+                flex: 1,
+                padding: "5px 10px",
+                background: C.danger,
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => {
+                toast.dismiss(t.id);
+                resolve(false);
+              }}
+              style={{
+                flex: 1,
+                padding: "5px 10px",
+                background: "#e0e0e0",
+                color: C.primary,
+                border: "none",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontSize: 13,
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ),
+      {
+        duration: Infinity, // stays until the user acts
+        icon: "🗑️",
+      },
+    );
+  });
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 export default function EvidenceUploader({ stepId, onChange }: Props) {
   const [files, setFiles] = useState<StepFileRecord[]>([]);
   const [uploading, setUploading] = useState<UploadingItem[]>([]);
@@ -173,7 +240,7 @@ export default function EvidenceUploader({ stepId, onChange }: Props) {
         return next;
       });
     } catch (err: any) {
-      alert(`Could not delete "${sf.filename}": ${err.message}`);
+      toast.error(`Could not delete "${sf.filename}": ${err.message}`);
     }
   }
 
@@ -195,7 +262,7 @@ export default function EvidenceUploader({ stepId, onChange }: Props) {
 
   return (
     <div>
-      {/* ── Drop Zone ─────────────────────────────────────────────────────── */}
+      {/* ── Drop Zone ───────────────────────────────────────────────────── */}
       <div
         onClick={() => inputRef.current?.click()}
         onDragOver={onDragOver}
@@ -213,94 +280,82 @@ export default function EvidenceUploader({ stepId, onChange }: Props) {
           userSelect: "none",
         }}
       >
-        <div style={{ fontSize: 32, marginBottom: 8 }}>
+        <div style={{ fontSize: 28, marginBottom: 6 }}>
           {isDragOver ? "📂" : "📎"}
         </div>
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 600,
-            color: C.primary,
-            marginBottom: 4,
-          }}
-        >
+        <div style={{ fontSize: 14, color: C.primary, fontWeight: 500 }}>
           {isDragOver ? "Drop files here" : "Drag & drop evidence files"}
         </div>
-        <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
+        <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>
           or{" "}
-          <span style={{ color: C.accent, fontWeight: 600 }}>
+          <span style={{ color: C.accent, fontWeight: 500 }}>
             click to browse
           </span>
         </div>
         <div
           style={{
             display: "flex",
-            gap: 6,
             justifyContent: "center",
-            flexWrap: "wrap",
+            gap: 6,
+            marginTop: 10,
           }}
         >
           {["🖼️ Images", "📄 PDF"].map((label) => (
             <span
               key={label}
               style={{
-                padding: "3px 10px",
-                background: "white",
-                border: `1px solid ${C.border}`,
-                borderRadius: 20,
                 fontSize: 11,
+                background: "#E8EDF5",
                 color: C.muted,
-                fontWeight: 500,
+                borderRadius: 20,
+                padding: "2px 10px",
               }}
             >
               {label}
             </span>
           ))}
         </div>
-        <div style={{ fontSize: 10, color: "#B0BEC5", marginTop: 6 }}>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>
           Max {MAX_MB} MB per file
         </div>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept={ACCEPT_ATTR}
+          style={{ display: "none" }}
+          onChange={(e) => {
+            if (e.target.files) processFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
       </div>
 
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        accept={ACCEPT_ATTR}
-        style={{ display: "none" }}
-        onChange={(e) => {
-          if (e.target.files) processFiles(e.target.files);
-          e.target.value = "";
-        }}
-      />
-
-      {/* ── In-progress / error chips ─────────────────────────────────────── */}
+      {/* ── In-progress / error chips ──────────────────────────────────── */}
       {uploading.map((u) => (
         <div
           key={u.localId}
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 12,
-            padding: "10px 14px",
-            background: u.error
-              ? "rgba(231,76,60,0.05)"
-              : "rgba(74,124,255,0.05)",
-            border: `1px solid ${u.error ? C.danger : C.accent}`,
-            borderRadius: 10,
-            marginBottom: 8,
+            gap: 10,
+            padding: "8px 12px",
+            background: u.error ? "rgba(231,76,60,0.07)" : "#F0F4FF",
+            border: `1px solid ${u.error ? C.danger : C.accent}22`,
+            borderRadius: 8,
+            marginBottom: 6,
           }}
         >
-          <span style={{ fontSize: 18 }}>{u.error ? "⚠️" : "⏳"}</span>
+          <span style={{ fontSize: 16 }}>{u.error ? "⚠️" : "⏳"}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
                 fontSize: 13,
-                fontWeight: 600,
+                fontWeight: 500,
                 color: C.primary,
-                whiteSpace: "nowrap",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
             >
               {u.filename}
@@ -313,9 +368,9 @@ export default function EvidenceUploader({ stepId, onChange }: Props) {
               <div
                 style={{
                   height: 4,
-                  background: "#E8EAF6",
+                  background: "#dde4f5",
                   borderRadius: 4,
-                  marginTop: 6,
+                  marginTop: 4,
                   overflow: "hidden",
                 }}
               >
@@ -323,9 +378,9 @@ export default function EvidenceUploader({ stepId, onChange }: Props) {
                   style={{
                     height: "100%",
                     width: `${u.progress}%`,
-                    background: `linear-gradient(90deg, ${C.accent}, ${C.success})`,
+                    background: C.accent,
                     borderRadius: 4,
-                    transition: "width 0.2s ease",
+                    transition: "width 0.2s",
                   }}
                 />
               </div>
@@ -349,9 +404,9 @@ export default function EvidenceUploader({ stepId, onChange }: Props) {
         </div>
       ))}
 
-      {/* ── Confirmed file list ───────────────────────────────────────────── */}
+      {/* ── Confirmed file list ────────────────────────────────────────── */}
       {loadingList ? (
-        <div style={{ fontSize: 12, color: C.muted, padding: "6px 0" }}>
+        <div style={{ padding: 12, color: C.muted, fontSize: 13 }}>
           Loading files…
         </div>
       ) : (
@@ -366,7 +421,7 @@ export default function EvidenceUploader({ stepId, onChange }: Props) {
         ))
       )}
 
-      {/* ── Image preview modal ───────────────────────────────────────────── */}
+      {/* ── Image preview modal ────────────────────────────────────────── */}
       {preview && (
         <PreviewModal
           file={preview}
@@ -378,7 +433,7 @@ export default function EvidenceUploader({ stepId, onChange }: Props) {
   );
 }
 
-// ─── FileChip ─────────────────────────────────────────────────────────────────
+// ─── FileChip ────────────────────────────────────────────────────────────────
 function FileChip({
   file,
   stepId,
@@ -393,17 +448,27 @@ function FileChip({
   const [deleting, setDeleting] = useState(false);
   const url = getFileDownloadUrl(stepId, file.id);
 
+  // ── Delete with toast confirm instead of window.confirm ──────────────────
+  async function handleDeleteClick() {
+    const confirmed = await toastConfirm(`Delete "${file.filename}"?`);
+    if (!confirmed) return;
+    setDeleting(true);
+    await onDelete();
+    setDeleting(false);
+  }
+
   return (
     <div
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 12,
-        padding: "10px 14px",
-        background: "white",
+        gap: 10,
+        padding: "10px 12px",
+        background: "#fff",
         border: `1px solid ${C.border}`,
         borderRadius: 10,
-        marginBottom: 8,
+        marginBottom: 6,
+        boxShadow: "none",
         transition: "box-shadow 0.15s",
       }}
       onMouseEnter={(e) =>
@@ -412,41 +477,23 @@ function FileChip({
       onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
     >
       {/* Icon */}
-      <div
-        onClick={file.is_image ? onPreview : undefined}
-        title={file.is_image ? "Click to preview" : undefined}
-        style={{
-          width: 40,
-          height: 40,
-          background: "rgba(74,124,255,0.08)",
-          borderRadius: 8,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 20,
-          cursor: file.is_image ? "zoom-in" : "default",
-          flexShrink: 0,
-        }}
-      >
-        {file.icon}
-      </div>
+      <div style={{ fontSize: 22, flexShrink: 0 }}>{file.icon}</div>
 
       {/* Info */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
             fontSize: 13,
-            fontWeight: 600,
+            fontWeight: 500,
             color: C.primary,
-            whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
-          title={file.filename}
         >
           {file.filename}
         </div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>
           {file.size_label} ·{" "}
           {new Date(file.uploaded_at).toLocaleDateString("en-US", {
             month: "short",
@@ -457,56 +504,56 @@ function FileChip({
       </div>
 
       {/* Actions */}
-      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          title={
-            file.mime_type === "application/pdf" ? "Open PDF" : "Open image"
-          }
-          style={{
-            width: 30,
-            height: 30,
-            background: "rgba(74,124,255,0.1)",
-            border: "none",
-            borderRadius: 6,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 14,
-            textDecoration: "none",
-            cursor: "pointer",
-          }}
-        >
-          🔗
-        </a>
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        title="Download"
+        style={{
+          fontSize: 16,
+          textDecoration: "none",
+          padding: 4,
+          color: C.muted,
+        }}
+      >
+        🔗
+      </a>
+      {file.is_image && (
         <button
-          onClick={async () => {
-            if (!confirm(`Delete "${file.filename}"?`)) return;
-            setDeleting(true);
-            await onDelete();
-            setDeleting(false);
-          }}
-          disabled={deleting}
-          title="Delete file"
+          onClick={onPreview}
+          title="Preview"
           style={{
-            width: 30,
-            height: 30,
-            background: deleting ? "#E0E0E0" : "rgba(231,76,60,0.1)",
+            background: "none",
             border: "none",
-            borderRadius: 6,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 14,
-            cursor: deleting ? "not-allowed" : "pointer",
-            color: C.danger,
+            cursor: "pointer",
+            fontSize: 16,
+            padding: 4,
+            color: C.muted,
           }}
         >
-          {deleting ? "…" : "🗑️"}
+          👁️
         </button>
-      </div>
+      )}
+      <button
+        onClick={handleDeleteClick}
+        disabled={deleting}
+        title="Delete file"
+        style={{
+          width: 30,
+          height: 30,
+          background: deleting ? "#E0E0E0" : "rgba(231,76,60,0.1)",
+          border: "none",
+          borderRadius: 6,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 14,
+          cursor: deleting ? "not-allowed" : "pointer",
+          color: C.danger,
+        }}
+      >
+        {deleting ? "…" : "🗑️"}
+      </button>
     </div>
   );
 }
@@ -538,12 +585,11 @@ function PreviewModal({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.78)",
-        zIndex: 9999,
+        background: "rgba(0,0,0,0.65)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 24,
+        zIndex: 1000,
       }}
     >
       <div
@@ -562,59 +608,48 @@ function PreviewModal({
         {/* Header */}
         <div
           style={{
-            padding: "12px 16px",
-            borderBottom: `1px solid ${C.border}`,
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
+            gap: 8,
+            padding: "12px 16px",
+            borderBottom: `1px solid ${C.border}`,
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 600, color: C.primary }}>
-            🖼️ {file.filename}
+          <span>🖼️</span>
+          <span
+            style={{ flex: 1, fontSize: 14, fontWeight: 500, color: C.primary }}
+          >
+            {file.filename}
           </span>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                fontSize: 12,
-                color: C.accent,
-                textDecoration: "none",
-                fontWeight: 600,
-              }}
-            >
-              Open full size ↗
-            </a>
-            <button
-              onClick={onClose}
-              style={{
-                background: "none",
-                border: "none",
-                fontSize: 20,
-                cursor: "pointer",
-                color: C.muted,
-                lineHeight: 1,
-              }}
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-        {/* Image */}
-        <div style={{ overflow: "auto" }}>
-          <img
-            src={url}
-            alt={file.filename}
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 13, color: C.accent, marginRight: 12 }}
+          >
+            Open full size ↗
+          </a>
+          <button
+            onClick={onClose}
             style={{
-              display: "block",
-              maxWidth: "85vw",
-              maxHeight: "80vh",
-              objectFit: "contain",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: 18,
+              color: C.muted,
+              padding: 4,
             }}
-          />
+          >
+            ✕
+          </button>
         </div>
+
+        {/* Image */}
+        <img
+          src={url}
+          alt={file.filename}
+          style={{ maxWidth: "85vw", maxHeight: "75vh", objectFit: "contain" }}
+        />
       </div>
     </div>
   );
