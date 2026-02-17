@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+// src/App.tsx
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import Topbar from "./components/Topbar";
 import Sidebar from "./components/Sidebar";
@@ -38,7 +39,6 @@ const INDUSTRIAL_COLORS = {
 
 type StepStatus = "draft" | "submitted" | "validated" | "rejected";
 
-// 🆕 Extended step state to include step_id
 interface StepState {
   status: StepStatus;
   step_id: number;
@@ -53,15 +53,12 @@ function EightDShell() {
   }>();
   const complaintIdNum = Number(complaintId);
 
-  // State for collapsible panels
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
 
-  // 🆕 Validation state
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [validationLoading, setValidationLoading] = useState(false);
 
-  // Steps state
   const [steps, setSteps] = useState<StepsState | null>(null);
   const [stepsLoading, setStepsLoading] = useState(true);
 
@@ -71,13 +68,12 @@ function EightDShell() {
 
   const stepCode = (step ?? "D1") as StepCode;
 
-  // 🆕 Load validation for current step
   const loadValidation = async (stepId: number) => {
     try {
       setValidationLoading(true);
       const validationData = await getStepValidation(stepId);
       setValidation(validationData);
-    } catch (error) {
+    } catch {
       console.log("No validation found for this step yet");
       setValidation(null);
     } finally {
@@ -85,16 +81,21 @@ function EightDShell() {
     }
   };
 
-  // Load steps from API
-  const loadSteps = async () => {
+  /**
+   * BUG FIX: getStepsByComplaintId now returns StepData[] (the .steps array
+   * is extracted inside the service function), so .forEach works correctly.
+   * The old code received { report_id, steps: [...] } and called .forEach
+   * on the whole object → TypeError: stepsArray.forEach is not a function.
+   */
+  const loadSteps = useCallback(async () => {
     try {
       setStepsLoading(true);
-      const stepsArray = await getStepsByComplaintId(complaintIdNum); // Already returns array
-      console.log("Steps loaded:", stepsArray);
+
+      // ✅ Returns StepData[] — the extraction of .steps is done in reports.ts
+      const stepsArray = await getStepsByComplaintId(complaintIdNum);
 
       const formatted = {} as StepsState;
-      stepsArray.forEach((s: any) => {
-        // Changed from res.steps to stepsArray
+      stepsArray.forEach((s) => {
         formatted[s.step_code as StepCode] = {
           status: s.status as StepStatus,
           step_id: s.id,
@@ -103,11 +104,8 @@ function EightDShell() {
 
       setSteps(formatted);
 
-      // 🆕 Load validation for current step if it exists and is validated/rejected
-      const currentStepData = stepsArray.find(
-        // Changed from res.steps
-        (s: any) => s.step_code === stepCode,
-      );
+      // Load validation for current step if it's already been validated/rejected
+      const currentStepData = stepsArray.find((s) => s.step_code === stepCode);
       if (
         currentStepData &&
         (currentStepData.status === "validated" ||
@@ -123,22 +121,20 @@ function EightDShell() {
     } finally {
       setStepsLoading(false);
     }
-  };
-  // Reload steps when complaint or step changes
-  useEffect(() => {
-    loadSteps();
   }, [complaintIdNum, stepCode]);
 
-  // 🆕 Function to update validation (called from child components)
+  useEffect(() => {
+    loadSteps();
+  }, [loadSteps]);
+
   const handleValidationUpdate = (newValidation: ValidationResult | null) => {
     setValidation(newValidation);
   };
 
-  // Render the appropriate step component
   const Page = useMemo(() => {
     const commonProps = {
       onRefreshSteps: loadSteps,
-      onValidationUpdate: handleValidationUpdate, // 🆕 Pass validation updater
+      onValidationUpdate: handleValidationUpdate,
     };
 
     switch (stepCode) {
@@ -161,9 +157,8 @@ function EightDShell() {
       default:
         return <D1 {...commonProps} />;
     }
-  }, [stepCode]);
+  }, [stepCode, loadSteps]);
 
-  // Calculate grid columns based on collapsed state
   const getGridColumns = () => {
     const sidebarWidth = sidebarCollapsed ? "60px" : "280px";
     const chatWidth = chatCollapsed ? "60px" : "360px";
@@ -175,7 +170,6 @@ function EightDShell() {
       style={{ minHeight: "100vh", background: INDUSTRIAL_COLORS.background }}
     >
       <Toaster position="top-center" />
-
       <Topbar />
 
       <div
@@ -218,7 +212,6 @@ function EightDShell() {
             transition: "all 0.3s ease",
           }}
         >
-          {/* Optional: Add expand buttons overlay when both panels are collapsed */}
           {sidebarCollapsed && chatCollapsed && (
             <div
               style={{
@@ -307,9 +300,7 @@ export default function App() {
       <Route path="/" element={<ComplaintsList />} />
       <Route path="/complaints" element={<ComplaintsList />} />
       <Route path="/complaints/new" element={<NewComplaint />} />
-
       <Route path="/8d/:complaintId/:step" element={<EightDShell />} />
-
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/8d" element={<Navigate to="/" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -176,7 +176,7 @@ export default function StepLayout({
           alignItems: "center",
         }}
       >
-        <button
+        {/* <button
           style={{
             padding: "12px 24px",
             borderRadius: 8,
@@ -193,7 +193,7 @@ export default function StepLayout({
         >
           <span>📎</span>
           <span>Add Evidence</span>
-        </button>
+        </button> */}
 
         <div style={{ display: "flex", gap: 12 }}>
           <button
