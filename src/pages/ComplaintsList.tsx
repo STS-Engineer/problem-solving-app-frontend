@@ -5,6 +5,7 @@ import AppHeader from "../components/AppHeader";
 import Pagination from "./Pagination";
 import { getCurrentStepByComplaint } from "../services/api/reports";
 import { getComplaints } from "../services/api/complaint";
+import toast from "react-hot-toast";
 
 const INDUSTRIAL_COLORS = {
   primary: "#2C3E50",
@@ -23,7 +24,7 @@ type ComplaintApi = {
   reference_number: string;
   id: number;
   complaint_name: string;
-  quality_issue_warranty?: string | null; // C1/C2/...
+  quality_issue_warranty?: string | null;
   customer?: string | null;
   customer_plant_name?: string | null;
   avocarbon_plant?: string | null;
@@ -31,8 +32,8 @@ type ComplaintApi = {
   potential_avocarbon_process_linked_to_problem?: string | null;
   product_line?: string | null;
   concerned_application?: string | null;
-  customer_complaint_date?: string | null; // YYYY-MM-DD
-  complaint_opening_date?: string | null; // YYYY-MM-DD
+  customer_complaint_date?: string | null;
+  complaint_opening_date?: string | null;
   complaint_description?: string | null;
   defects?: string | null;
   quality_manager?: number | null;
@@ -70,7 +71,6 @@ function formatDate(value?: string | null) {
 function getStatusBadge(status: string) {
   const s = (status || "").trim().toUpperCase();
 
-  // draft badge
   if (s === "DRAFT") {
     return {
       text: "Brouillon",
@@ -80,7 +80,6 @@ function getStatusBadge(status: string) {
     };
   }
 
-  // step badge
   const stepSet = new Set(["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"]);
   if (stepSet.has(s)) {
     return {
@@ -91,7 +90,6 @@ function getStatusBadge(status: string) {
     };
   }
 
-  // fallback for anything else
   return {
     text: status || "—",
     bg: "rgba(189, 195, 199, 0.10)",
@@ -103,7 +101,6 @@ function getStatusBadge(status: string) {
 function deriveStepAndProgress(status: string) {
   const s = (status || "").trim().toUpperCase();
 
-  // draft = no step filled
   if (s === "DRAFT") return { step: "—", progress: 0 };
 
   const stepProgress: Record<string, number> = {
@@ -119,7 +116,6 @@ function deriveStepAndProgress(status: string) {
 
   if (s in stepProgress) return { step: s, progress: stepProgress[s] };
 
-  // fallback if something unexpected
   return { step: "—", progress: 0 };
 }
 
@@ -141,7 +137,6 @@ function getWarrantyBadgeStyle(code?: string | null) {
     };
   }
 
-  // Default (C3, C4, etc.)
   return {
     bg: "rgba(52, 152, 219, 0.12)",
     border: `2px solid ${INDUSTRIAL_COLORS.info}`,
@@ -168,14 +163,18 @@ export default function ComplaintsList() {
     try {
       setRedirecting(complaintId);
 
-      // Récupérer l'étape courante
-      const currentStep = await getCurrentStepByComplaint(complaintId);
+      // Get current step
+      const response = await getCurrentStepByComplaint(complaintId);
 
-      // Rediriger vers l'étape courante
-      navigate(`/8d/${complaintId}/${currentStep.current_step_code}`);
+      // Handle response format (might be nested)
+      const currentStepCode = response.step_code || "D1";
+      console.log("📍 Navigating to:", `/8d/${complaintId}/${currentStepCode}`);
+
+      // Redirect to current step
+      navigate(`/8d/${complaintId}/${currentStepCode}`);
     } catch (error: any) {
-      console.error("Erreur:", error);
-      alert("❌ " + error.message);
+      console.error("❌ Error opening 8D:", error);
+      toast.error(error.message || "Failed to open 8D report");
       setRedirecting(null);
     }
   };
@@ -187,7 +186,7 @@ export default function ComplaintsList() {
       setLoading(true);
       setErrorMsg(null);
       try {
-        const json = (await getComplaints(
+        const response = await getComplaints(
           {
             skip: 0,
             limit: 200,
@@ -196,20 +195,68 @@ export default function ComplaintsList() {
               productLineFilter !== "all" ? productLineFilter : undefined,
           },
           controller.signal,
-        )) as ComplaintApi[];
+        );
 
-        setData(Array.isArray(json) ? json : []);
+        console.log("📦 Complaints API Response:", response);
+        console.log("📦 Response type:", typeof response);
+        console.log("📦 Is array?:", Array.isArray(response));
+
+        // Handle multiple possible response formats
+        let complaintsArray: ComplaintApi[];
+
+        if (Array.isArray(response)) {
+          // Response is already an array
+          complaintsArray = response;
+        } else if (
+          response &&
+          typeof response === "object" &&
+          "complaints" in response
+        ) {
+          // Response is wrapped in {complaints: [...]}
+          complaintsArray = (response as any).complaints;
+        } else if (
+          response &&
+          typeof response === "object" &&
+          "data" in response
+        ) {
+          // Response is wrapped in {data: [...]}
+          complaintsArray = (response as any).data;
+        } else if (
+          response &&
+          typeof response === "object" &&
+          "items" in response
+        ) {
+          // Response is wrapped in {items: [...]}
+          complaintsArray = (response as any).items;
+        } else {
+          console.error("❌ Unexpected response format:", response);
+          setErrorMsg("Invalid response format from server");
+          setData([]);
+          return;
+        }
+
+        console.log("✅ Complaints array:", complaintsArray);
+
+        if (!Array.isArray(complaintsArray)) {
+          console.error("❌ complaintsArray is not an array:", complaintsArray);
+          setErrorMsg("Invalid data structure from server");
+          setData([]);
+          return;
+        }
+
+        setData(complaintsArray);
       } catch (e: any) {
         if (
           e?.name === "CanceledError" ||
           e?.code === "ERR_CANCELED" ||
           e?.name === "AbortError"
-        )
+        ) {
           return;
+        }
 
-        setErrorMsg(
-          e?.message || "Erreur lors du chargement des réclamations.",
-        );
+        console.error("❌ Error loading complaints:", e);
+        setErrorMsg(e?.message || "Error loading complaints");
+        setData([]);
       } finally {
         setLoading(false);
       }
@@ -291,8 +338,7 @@ export default function ComplaintsList() {
       }}
     >
       <AppHeader
-        title="Customer Complaint Tracking
-"
+        title="Customer Complaint Tracking"
         logoSrc={logo}
         actions={
           <>
@@ -320,7 +366,8 @@ export default function ComplaintsList() {
         }
       />
 
-      {/* Stats */}
+      {/* Rest of the component remains the same... */}
+      {/* Stats section */}
       <div
         style={{
           display: "grid",
