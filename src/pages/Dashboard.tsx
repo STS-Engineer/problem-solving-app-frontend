@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   ResponsiveContainer,
@@ -15,19 +15,7 @@ import {
 } from "recharts";
 import logo from "../assets/images/logo-avocarbon.png";
 import AppHeader from "../components/AppHeader";
-
-type Plant =
-  | "MONTERREY"
-  | "Kunshan"
-  | "CHENNAI"
-  | "DAEGU"
-  | "TIANJIN"
-  | "POITIERS"
-  | "FRANKFURT"
-  | "SCEET"
-  | "SAME"
-  | "AMIENS"
-  | "ANHUI";
+import type { DashboardData, Plant } from "../types/dashboard";
 
 const PLANTS: Plant[] = [
   "MONTERREY",
@@ -43,679 +31,325 @@ const PLANTS: Plant[] = [
   "ANHUI",
 ];
 
-// Palette industrielle professionnelle - tons sombres et métalliques
 const PLANT_COLORS: Record<Plant, string> = {
-  MONTERREY: "#FF8C42", // Orange industriel
-  Kunshan: "#4A90E2", // Bleu acier
-  CHENNAI: "#7ED321", // Vert lime
-  DAEGU: "#00BCD4", // Cyan tech
-  TIANJIN: "#9B59B6", // Violet profond
-  POITIERS: "#F1C40F", // Jaune industriel
-  FRANKFURT: "#4A7CFF", // Bleu électrique
-  SCEET: "#B8A494", // Beige métallique
-  SAME: "#34495E", // Gris ardoise
-  AMIENS: "#1A1A1A", // Noir charbon
-  ANHUI: "#D63031", // Rouge vif
-};
-
-const CUSTOMER_COLORS: Record<string, string> = {
-  "AVO CARBON Poitiers": "#4A7CFF",
-  "Avo Kunshan": "#00BCD4",
-  "Bosch Changsha": "#7ED321",
-  "Changsha Valeo": "#FF8C42",
-  HUAN: "#9B59B6",
-  "AVO MEXICO PLANT": "#F1C40F",
-  "Avo germany": "#4A90E2",
-  Changsha: "#D63031",
-  Chongqing: "#34495E",
-  "AVO Mexico plant": "#B8A494",
-  "Changsha Valeo Automotive Wiper Systems Co.,LTD": "#16A085",
-  "HUAN MOTOR": "#8E44AD",
-  "AVO Tianjin": "#E67E22",
-  Buhler: "#C0392B",
-  "Changsha Valeo Automotive Wiper Systems Co. LTD": "#27AE60",
-  "Aditya Auto components": "#1ABC9C",
-  "Buhler C2": "#3498DB",
-  "Changsha Valeo Automotive Wiper Systems Co.,Ltd": "#F39C12",
-};
-
-// Couleur moderne pour graphiques simples
-const PRIMARY_GRADIENT = {
-  start: "#4A7CFF",
-  end: "#2C5FE0",
+  MONTERREY: "#FF8C42",
+  Kunshan: "#4A90E2",
+  CHENNAI: "#7ED321",
+  DAEGU: "#00BCD4",
+  TIANJIN: "#9B59B6",
+  POITIERS: "#F1C40F",
+  FRANKFURT: "#4A7CFF",
+  SCEET: "#B8A494",
+  SAME: "#34495E",
+  AMIENS: "#1A1A1A",
+  ANHUI: "#D63031",
 };
 
 const INDUSTRIAL_COLORS = {
-  primary: "#2C3E50", // Gris foncé
-  secondary: "#34495E", // Gris ardoise
-  accent: "#4A7CFF", // Bleu tech
-  success: "#27AE60", // Vert industriel
-  warning: "#F39C12", // Orange attention
-  danger: "#E74C3C", // Rouge alerte
-  info: "#3498DB", // Bleu info
-  dark: "#1A1A1A", // Noir profond
-  light: "#ECF0F1", // Gris clair
-  border: "#BDC3C7", // Gris bordure
+  primary: "#2C3E50",
+  secondary: "#34495E",
+  accent: "#4A7CFF",
+  success: "#27AE60",
+  warning: "#F39C12",
+  danger: "#E74C3C",
+  info: "#3498DB",
+  dark: "#1A1A1A",
+  light: "#ECF0F1",
+  border: "#BDC3C7",
 };
 
-function hmsToSeconds(hms: string) {
-  const [h, m, s] = hms.split(":").map((x) => Number(x));
-  return h * 3600 + m * 60 + s;
-}
-
-function secondsToHmsShort(sec: number) {
+function secondsToHmsShort(sec: number): string {
   if (!Number.isFinite(sec) || sec <= 0) return "00:00";
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+interface AvailableYears {
+  years: number[];
+  current_year: number;
+  default_year: number;
+}
+
 export default function Dashboard() {
-  const [year] = useState(2025);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(
+    null,
+  );
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null);
 
+  // Fetch available years on mount
+  useEffect(() => {
+    const fetchAvailableYears = async () => {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/v1/dashboard/available-years`,
+        );
+        if (response.ok) {
+          const data: AvailableYears = await response.json();
+          setAvailableYears(data.years);
+          setYear(data.default_year);
+        }
+      } catch (err) {
+        console.error("Failed to fetch available years:", err);
+        setYear(new Date().getFullYear());
+      }
+    };
+
+    fetchAvailableYears();
+  }, []);
+
+  // Fetch full dashboard data
+  const fetchDashboardData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/dashboard/stats?year=${year}`,
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data: DashboardData = await response.json();
+      setDashboardData(data);
+      setLastFetchTime(new Date());
+    } catch (err) {
+      console.error("Failed to fetch dashboard data:", err);
+      setError(err instanceof Error ? err.message : "Failed to load dashboard");
+    } finally {
+      setLoading(false);
+    }
+  }, [year]);
+
+  // Fetch lightweight real-time stats
+  const fetchRealtimeStats = useCallback(async () => {
+    if (!dashboardData) return;
+
+    setIsRefreshing(true);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/dashboard/stats/realtime?year=${year}`,
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      setDashboardData((prev) =>
+        prev
+          ? {
+              ...prev,
+              total_complaints: data.total_complaints,
+              last_update: data.last_update,
+            }
+          : null,
+      );
+
+      setLastFetchTime(new Date());
+    } catch (err) {
+      console.error("Failed to fetch realtime stats:", err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [dashboardData, year]);
+
+  // Initial fetch and year changes
+  useEffect(() => {
+    if (year) {
+      fetchDashboardData();
+    }
+  }, [fetchDashboardData]);
+
+  // Polling for real-time updates (every 30 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchRealtimeStats();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [fetchRealtimeStats]);
+
+  const handleRefresh = () => {
+    fetchDashboardData();
+  };
+
+  const handleYearChange = (newYear: number) => {
+    setYear(newYear);
+  };
+
+  // Derived data with fallbacks - BEFORE loading/error checks
   const monthly = useMemo(
-    () => [
-      {
-        month: "Jan",
-        MONTERREY: 1,
-        Kunshan: 0,
-        CHENNAI: 1,
-        DAEGU: 0,
-        TIANJIN: 1,
-        POITIERS: 0,
-        FRANKFURT: 5,
-        SCEET: 0,
-        SAME: 1,
-        AMIENS: 0,
-        ANHUI: 0,
-        total: 9,
-      },
-      {
-        month: "Fév",
-        MONTERREY: 3,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 0,
-        TIANJIN: 1,
-        POITIERS: 0,
-        FRANKFURT: 0,
-        SCEET: 5,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 0,
-        total: 9,
-      },
-      {
-        month: "Mar",
-        MONTERREY: 2,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 0,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 0,
-        SCEET: 0,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 1,
-        total: 3,
-      },
-      {
-        month: "Avr",
-        MONTERREY: 2,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 0,
-        TIANJIN: 1,
-        POITIERS: 0,
-        FRANKFURT: 6,
-        SCEET: 1,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 2,
-        total: 12,
-      },
-      {
-        month: "Mai",
-        MONTERREY: 4,
-        Kunshan: 0,
-        CHENNAI: 1,
-        DAEGU: 0,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 0,
-        SCEET: 0,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 1,
-        total: 6,
-      },
-      {
-        month: "Jun",
-        MONTERREY: 2,
-        Kunshan: 0,
-        CHENNAI: 1,
-        DAEGU: 0,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 6,
-        SCEET: 0,
-        SAME: 2,
-        AMIENS: 0,
-        ANHUI: 0,
-        total: 11,
-      },
-      {
-        month: "Jul",
-        MONTERREY: 0,
-        Kunshan: 0,
-        CHENNAI: 3,
-        DAEGU: 1,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 0,
-        SCEET: 1,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 0,
-        total: 6,
-      },
-      {
-        month: "Aoû",
-        MONTERREY: 0,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 0,
-        TIANJIN: 1,
-        POITIERS: 0,
-        FRANKFURT: 5,
-        SCEET: 1,
-        SAME: 1,
-        AMIENS: 0,
-        ANHUI: 0,
-        total: 8,
-      },
-      {
-        month: "Sep",
-        MONTERREY: 0,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 1,
-        TIANJIN: 1,
-        POITIERS: 0,
-        FRANKFURT: 3,
-        SCEET: 3,
-        SAME: 0,
-        AMIENS: 1,
-        ANHUI: 0,
-        total: 9,
-      },
-      {
-        month: "Oct",
-        MONTERREY: 3,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 0,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 2,
-        SCEET: 0,
-        SAME: 1,
-        AMIENS: 0,
-        ANHUI: 0,
-        total: 7,
-      },
-      {
-        month: "Nov",
-        MONTERREY: 0,
-        Kunshan: 0,
-        CHENNAI: 1,
-        DAEGU: 0,
-        TIANJIN: 1,
-        POITIERS: 0,
-        FRANKFURT: 2,
-        SCEET: 1,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 1,
-        total: 6,
-      },
-      {
-        month: "Déc",
-        MONTERREY: 4,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 0,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 0,
-        SCEET: 2,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 1,
-        total: 9,
-      },
-    ],
-    [],
+    () => dashboardData?.monthly_data || [],
+    [dashboardData],
   );
-
   const totalByPlant = useMemo(
-    () => [
-      { plant: "AMIENS", count: 1 },
-      { plant: "POITIERS", count: 3 },
-      { plant: "SAME", count: 4 },
-      { plant: "Kunshan", count: 6 },
-      { plant: "ANHUI", count: 7 },
-      { plant: "DAEGU", count: 7 },
-      { plant: "TIANJIN", count: 11 },
-      { plant: "CHENNAI", count: 11 },
-      { plant: "MONTERREY", count: 23 },
-      { plant: "SCEET", count: 29 },
-      { plant: "FRANKFURT", count: 45 },
-    ],
-    [],
+    () => dashboardData?.total_by_plant || [],
+    [dashboardData],
   );
-
-  // Nouveau: Claims by plant with customer breakdown (stacked)
   const claimsByPlantCustomer = useMemo(
-    () => [
-      {
-        plant: "AMIENS",
-        customer1: 1,
-        customer2: 0,
-        customer3: 0,
-        customer4: 0,
-        customer5: 0,
-      },
-      {
-        plant: "POITIERS",
-        customer1: 1,
-        customer2: 1,
-        customer3: 1,
-        customer4: 0,
-        customer5: 0,
-      },
-      {
-        plant: "SAME",
-        customer1: 3,
-        customer2: 1,
-        customer3: 0,
-        customer4: 0,
-        customer5: 0,
-      },
-      {
-        plant: "Kunshan",
-        customer1: 2,
-        customer2: 2,
-        customer3: 1,
-        customer4: 1,
-        customer5: 0,
-      },
-      {
-        plant: "ANHUI",
-        customer1: 2,
-        customer2: 2,
-        customer3: 1,
-        customer4: 1,
-        customer5: 1,
-      },
-      {
-        plant: "DAEGU",
-        customer1: 3,
-        customer2: 2,
-        customer3: 1,
-        customer4: 1,
-        customer5: 0,
-      },
-      {
-        plant: "TIANJIN",
-        customer1: 6,
-        customer2: 2,
-        customer3: 1,
-        customer4: 1,
-        customer5: 1,
-      },
-      {
-        plant: "CHENNAI",
-        customer1: 6,
-        customer2: 2,
-        customer3: 1,
-        customer4: 1,
-        customer5: 1,
-      },
-      {
-        plant: "MONTERREY",
-        customer1: 11,
-        customer2: 6,
-        customer3: 3,
-        customer4: 2,
-        customer5: 1,
-      },
-      {
-        plant: "SCEET",
-        customer1: 6,
-        customer2: 6,
-        customer3: 4,
-        customer4: 4,
-        customer5: 9,
-      },
-      {
-        plant: "FRANKFURT",
-        customer1: 3,
-        customer2: 5,
-        customer3: 8,
-        customer4: 10,
-        customer5: 19,
-      },
-    ],
-    [],
+    () => dashboardData?.claims_by_plant_customer || [],
+    [dashboardData],
   );
-
-  // Nouveau: Customer VS AvoCarbon Sites (simplified from image)
   const customerVsAvoCarbon = useMemo(
-    () => [
-      {
-        customer: "OTHERS",
-        MONTERREY: 1,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 0,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 0,
-        SCEET: 0,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 0,
-      },
-      {
-        customer: "Buhler",
-        MONTERREY: 0,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 1,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 0,
-        SCEET: 0,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 0,
-      },
-      {
-        customer: "HUAN",
-        MONTERREY: 0,
-        Kunshan: 0,
-        CHENNAI: 1,
-        DAEGU: 0,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 0,
-        SCEET: 0,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 0,
-      },
-      {
-        customer: "Changsha Valeo",
-        MONTERREY: 0,
-        Kunshan: 0,
-        CHENNAI: 1,
-        DAEGU: 0,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 0,
-        SCEET: 0,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 1,
-      },
-      {
-        customer: "Bosch",
-        MONTERREY: 1,
-        Kunshan: 0,
-        CHENNAI: 1,
-        DAEGU: 0,
-        TIANJIN: 0,
-        POITIERS: 0,
-        FRANKFURT: 1,
-        SCEET: 0,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 0,
-      },
-      {
-        customer: "AVO Mexico",
-        MONTERREY: 2,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 0,
-        TIANJIN: 1,
-        POITIERS: 0,
-        FRANKFURT: 1,
-        SCEET: 1,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 0,
-      },
-      {
-        customer: "AVO Tianjin",
-        MONTERREY: 0,
-        Kunshan: 0,
-        CHENNAI: 0,
-        DAEGU: 0,
-        TIANJIN: 2,
-        POITIERS: 0,
-        FRANKFURT: 2,
-        SCEET: 0,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 0,
-      },
-      {
-        customer: "AVO Kunshan",
-        MONTERREY: 0,
-        Kunshan: 2,
-        CHENNAI: 0,
-        DAEGU: 1,
-        TIANJIN: 1,
-        POITIERS: 0,
-        FRANKFURT: 2,
-        SCEET: 2,
-        SAME: 0,
-        AMIENS: 0,
-        ANHUI: 1,
-      },
-      {
-        customer: "AVO Auto",
-        MONTERREY: 3,
-        Kunshan: 1,
-        CHENNAI: 2,
-        DAEGU: 1,
-        TIANJIN: 1,
-        POITIERS: 0,
-        FRANKFURT: 5,
-        SCEET: 4,
-        SAME: 1,
-        AMIENS: 0,
-        ANHUI: 2,
-      },
-      {
-        customer: "AVO Carbon",
-        MONTERREY: 5,
-        Kunshan: 1,
-        CHENNAI: 3,
-        DAEGU: 2,
-        TIANJIN: 3,
-        POITIERS: 1,
-        FRANKFURT: 8,
-        SCEET: 8,
-        SAME: 1,
-        AMIENS: 1,
-        ANHUI: 2,
-      },
-    ],
-    [],
+    () => dashboardData?.customer_vs_sites || [],
+    [dashboardData],
   );
-
-  // Nouveau: CSI/CSII monthly data
-  const csiCsiiMonthly = useMemo(
-    () => [
-      { month: "Jan", C2: 4, C1: 4, WR: 0, QualityAlert: 1 },
-      { month: "Fév", C2: 5, C1: 3, WR: 1, QualityAlert: 0 },
-      { month: "Mar", C2: 7, C1: 3, WR: 0, QualityAlert: 2 },
-      { month: "Avr", C2: 5, C1: 2, WR: 2, QualityAlert: 1 },
-      { month: "Mai", C2: 6, C1: 2, WR: 2, QualityAlert: 3 },
-      { month: "Jun", C2: 3, C1: 5, WR: 1, QualityAlert: 1 },
-      { month: "Jul", C2: 4, C1: 3, WR: 1, QualityAlert: 10 },
-      { month: "Aoû", C2: 5, C1: 3, WR: 2, QualityAlert: 4 },
-      { month: "Sep", C2: 7, C1: 3, WR: 4, QualityAlert: 0 },
-      { month: "Oct", C2: 9, C1: 6, WR: 2, QualityAlert: 3 },
-      { month: "Nov", C2: 4, C1: 2, WR: 2, QualityAlert: 3 },
-      { month: "Déc", C2: 4, C1: 2, WR: 0, QualityAlert: 0 },
-    ],
-    [],
-  );
-
+  const statusMonthly = useMemo(
+    () => dashboardData?.status_monthly || [],
+    [dashboardData],
+  ); // FIXED: Changed from csi_csii_monthly to status_monthly
   const delayTime = useMemo(
-    () => [
-      {
-        plant: "TIANJIN",
-        d13: hmsToSeconds("00:00:00"),
-        d15: hmsToSeconds("00:00:00"),
-        d18: hmsToSeconds("00:00:00"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-      {
-        plant: "FRANKFURT",
-        d13: hmsToSeconds("00:00:00"),
-        d15: hmsToSeconds("3235:10:12"),
-        d18: hmsToSeconds("3761:37:46"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-      {
-        plant: "SCEET",
-        d13: hmsToSeconds("121:06:29"),
-        d15: hmsToSeconds("776:23:07"),
-        d18: hmsToSeconds("1972:40:32"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-      {
-        plant: "CHENNAI",
-        d13: hmsToSeconds("77:41:07"),
-        d15: hmsToSeconds("00:00:00"),
-        d18: hmsToSeconds("00:00:00"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-      {
-        plant: "ANHUI",
-        d13: hmsToSeconds("00:00:00"),
-        d15: hmsToSeconds("00:00:00"),
-        d18: hmsToSeconds("00:00:00"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-      {
-        plant: "Kunshan",
-        d13: hmsToSeconds("00:00:05"),
-        d15: hmsToSeconds("00:00:00"),
-        d18: hmsToSeconds("3667:10:47"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-      {
-        plant: "DAEGU",
-        d13: hmsToSeconds("00:00:00"),
-        d15: hmsToSeconds("00:00:00"),
-        d18: hmsToSeconds("2883:58:49"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-      {
-        plant: "MONTERREY",
-        d13: hmsToSeconds("00:00:00"),
-        d15: hmsToSeconds("374:17:33"),
-        d18: hmsToSeconds("716:19:42"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-      {
-        plant: "POITIERS",
-        d13: hmsToSeconds("198:42:19"),
-        d15: hmsToSeconds("00:00:00"),
-        d18: hmsToSeconds("00:00:00"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-      {
-        plant: "SAME",
-        d13: hmsToSeconds("73:00:00"),
-        d15: hmsToSeconds("00:00:00"),
-        d18: hmsToSeconds("00:00:00"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-      {
-        plant: "AMIENS",
-        d13: hmsToSeconds("00:00:00"),
-        d15: hmsToSeconds("00:00:00"),
-        d18: hmsToSeconds("00:00:00"),
-        llc: hmsToSeconds("00:00:00"),
-      },
-    ],
-    [],
+    () => dashboardData?.delay_time || [],
+    [dashboardData],
   );
-
   const defectType = useMemo(
-    () => [
-      { type: "Fit", count: 5 },
-      { type: "NA", count: 16 },
-      { type: "Apparance", count: 27 },
-      { type: "Dimensional", count: 28 },
-      { type: "Function", count: 70 },
-    ],
-    [],
+    () => dashboardData?.defect_types || [],
+    [dashboardData],
   );
-
   const productType = useMemo(
-    () => [
-      { type: "SEAL", count: 1 },
-      { type: "CHOKE", count: 10 },
-      { type: "ASSEMBLY", count: 58 },
-      { type: "BRUSH", count: 78 },
-    ],
-    [],
+    () => dashboardData?.product_types || [],
+    [dashboardData],
   );
-
   const costD13 = useMemo(
-    () => [
-      { name: "CHENNAI", value: 39.4 },
-      { name: "ANHUI", value: 35.3 },
-      { name: "SCEET", value: 23.4 },
-      { name: "Kunshan", value: 1.0 },
-      { name: "FRANKFURT", value: 0.9 },
-    ],
-    [],
+    () => dashboardData?.cost_distribution?.costD13 || [],
+    [dashboardData],
   );
-
   const costD45 = useMemo(
-    () => [
-      { name: "CHENNAI", value: 60.7 },
-      { name: "SCEET", value: 34.4 },
-      { name: "ANHUI", value: 4.5 },
-      { name: "Kunshan", value: 0.4 },
-    ],
-    [],
+    () => dashboardData?.cost_distribution?.costD45 || [],
+    [dashboardData],
   );
-
   const costD68 = useMemo(
-    () => [
-      { name: "SCEET", value: 65.3 },
-      { name: "Kunshan", value: 16.7 },
-      { name: "FRANKFURT", value: 14.0 },
-      { name: "ANHUI", value: 2.2 },
-      { name: "CHENNAI", value: 1.7 },
-    ],
-    [],
+    () => dashboardData?.cost_distribution?.costD68 || [],
+    [dashboardData],
+  );
+  const costLLC = useMemo(
+    () => dashboardData?.cost_distribution?.costLLC || [],
+    [dashboardData],
   );
 
-  const costLLC = useMemo(() => [{ name: "SCEET", value: 100.0 }], []);
+  const totalComplaints = dashboardData?.total_complaints || 0;
+  const topPlant = dashboardData?.top_plant || { plant: "N/A", count: 0 };
+  const lastUpdate = dashboardData?.last_update;
 
-  const totalComplaints = 147;
+  const formatLastUpdate = (
+    dateString: string | null | undefined,
+  ): { date: string; time: string } => {
+    if (!dateString) return { date: "N/A", time: "N/A" };
+
+    const date = new Date(dateString);
+    return {
+      date: date.toLocaleDateString("en-US", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      time: date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }),
+    };
+  };
+
+  const formattedUpdate = formatLastUpdate(lastUpdate);
+
+  // Loading state
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "linear-gradient(135deg, #E8EAF6 0%, #F5F7FA 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: 20,
+        }}
+      >
+        <div
+          style={{
+            width: 60,
+            height: 60,
+            border: "4px solid #E0E0E0",
+            borderTop: "4px solid #4A7CFF",
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite",
+          }}
+        />
+        <div style={{ fontSize: 18, color: "#78909C", fontWeight: 600 }}>
+          Loading dashboard...
+        </div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "linear-gradient(135deg, #E8EAF6 0%, #F5F7FA 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: 20,
+          padding: 24,
+        }}
+      >
+        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+        <div
+          style={{
+            fontSize: 24,
+            color: INDUSTRIAL_COLORS.danger,
+            fontWeight: 700,
+            marginBottom: 8,
+          }}
+        >
+          Loading Error
+        </div>
+        <div style={{ fontSize: 16, color: "#78909C", marginBottom: 24 }}>
+          {error}
+        </div>
+        <button
+          onClick={handleRefresh}
+          style={{
+            background: "linear-gradient(135deg, #4A7CFF 0%, #2C5FE0 100%)",
+            color: "white",
+            padding: "12px 32px",
+            borderRadius: 8,
+            fontWeight: 600,
+            fontSize: 14,
+            border: "none",
+            cursor: "pointer",
+            boxShadow: "0 4px 12px rgba(74, 124, 255, 0.3)",
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -725,12 +359,67 @@ export default function Dashboard() {
         padding: "24px",
       }}
     >
-      {/* Header industriel moderne */}
+      {/* Header with Year Selector */}
       <AppHeader
         title="Quality Control Dashboard"
         logoSrc={logo}
         actions={
           <>
+            {/* Year Selector */}
+            <select
+              value={year}
+              onChange={(e) => handleYearChange(Number(e.target.value))}
+              style={{
+                background: "rgba(255,255,255,0.15)",
+                color: "white",
+                padding: "12px 20px",
+                borderRadius: 8,
+                fontWeight: 600,
+                fontSize: 14,
+                border: "1px solid rgba(255,255,255,0.3)",
+                backdropFilter: "blur(10px)",
+                cursor: "pointer",
+                outline: "none",
+              }}
+            >
+              {availableYears.length > 0 ? (
+                availableYears.map((y) => (
+                  <option key={y} value={y} style={{ color: "#2C3E50" }}>
+                    {y}
+                  </option>
+                ))
+              ) : (
+                <option value={year} style={{ color: "#2C3E50" }}>
+                  {year}
+                </option>
+              )}
+            </select>
+
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              style={{
+                background: isRefreshing
+                  ? "rgba(255,255,255,0.05)"
+                  : "rgba(255,255,255,0.1)",
+                color: "white",
+                padding: "12px 20px",
+                borderRadius: 8,
+                fontWeight: 600,
+                fontSize: 14,
+                border: "1px solid rgba(255,255,255,0.2)",
+                backdropFilter: "blur(10px)",
+                cursor: isRefreshing ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                opacity: isRefreshing ? 0.6 : 1,
+              }}
+            >
+              <span style={{ fontSize: 16 }}>🔄</span>
+              {isRefreshing ? "Refreshing..." : "Refresh"}
+            </button>
+
             <Link
               to="/complaints/new"
               style={{
@@ -748,7 +437,7 @@ export default function Dashboard() {
                 gap: 8,
               }}
             >
-              + Nouvelle réclamation
+              + New Complaint
             </Link>
 
             <Link
@@ -768,13 +457,63 @@ export default function Dashboard() {
                 gap: 8,
               }}
             >
-              Liste des réclamations
+              Complaints List
             </Link>
           </>
         }
       />
 
-      {/* KPI Cards - Style industriel moderne */}
+      {/* Real-time indicator */}
+      {lastFetchTime && (
+        <div
+          style={{
+            background: "white",
+            borderRadius: 8,
+            padding: "8px 16px",
+            marginBottom: 16,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+            border: "1px solid #E0E0E0",
+          }}
+        >
+          <div
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: isRefreshing ? "#F39C12" : "#27AE60",
+              animation: isRefreshing
+                ? "pulse 1.5s ease-in-out infinite"
+                : "none",
+            }}
+          />
+          <div style={{ fontSize: 13, color: "#78909C" }}>
+            {isRefreshing
+              ? "Updating..."
+              : `Last updated: ${lastFetchTime.toLocaleTimeString("en-US")}`}
+          </div>
+          <div
+            style={{
+              marginLeft: "auto",
+              fontSize: 13,
+              color: "#4A7CFF",
+              fontWeight: 600,
+            }}
+          >
+            Year: {year}
+          </div>
+          <style>{`
+            @keyframes pulse {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.3; }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* KPI Cards */}
       <div
         style={{
           display: "grid",
@@ -783,6 +522,7 @@ export default function Dashboard() {
           marginBottom: 24,
         }}
       >
+        {/* Total Complaints Card */}
         <div
           style={{
             background: "white",
@@ -816,7 +556,7 @@ export default function Dashboard() {
               letterSpacing: "0.5px",
             }}
           >
-            Total Réclamations
+            Total Complaints
           </div>
           <div
             style={{
@@ -843,10 +583,11 @@ export default function Dashboard() {
             }}
           >
             <span style={{ fontSize: 16 }}>📊</span>
-            Année {year}
+            Year {year}
           </div>
         </div>
 
+        {/* Top Plant Card */}
         <div
           style={{
             background: "white",
@@ -880,7 +621,7 @@ export default function Dashboard() {
               letterSpacing: "0.5px",
             }}
           >
-            Site prioritaire
+            Top Priority Plant
           </div>
           <div
             style={{
@@ -891,7 +632,7 @@ export default function Dashboard() {
               color: INDUSTRIAL_COLORS.primary,
             }}
           >
-            FRANKFURT
+            {topPlant.plant}
           </div>
           <div
             style={{
@@ -907,10 +648,11 @@ export default function Dashboard() {
             }}
           >
             <span style={{ fontSize: 16 }}>🏭</span>
-            45 réclamations
+            {topPlant.count} complaints
           </div>
         </div>
 
+        {/* Last Update Card */}
         <div
           style={{
             background: "white",
@@ -944,7 +686,7 @@ export default function Dashboard() {
               letterSpacing: "0.5px",
             }}
           >
-            Dernière MàJ
+            Last Update
           </div>
           <div
             style={{
@@ -955,7 +697,7 @@ export default function Dashboard() {
               color: INDUSTRIAL_COLORS.primary,
             }}
           >
-            09 Fév 2026
+            {formattedUpdate.date}
           </div>
           <div
             style={{
@@ -971,14 +713,14 @@ export default function Dashboard() {
             }}
           >
             <span style={{ fontSize: 16 }}>🕐</span>
-            11:53
+            {formattedUpdate.time}
           </div>
         </div>
       </div>
 
       {/* Section principale avec graphiques */}
       <div style={{ display: "grid", gap: 24 }}>
-        {/* Réclamations mensuelles */}
+        {/* Monthly Evolution Chart */}
         <div
           style={{
             background: "white",
@@ -1020,7 +762,7 @@ export default function Dashboard() {
                     color: INDUSTRIAL_COLORS.primary,
                   }}
                 >
-                  Évolution mensuelle des réclamations
+                  Monthly Complaints Evolution
                 </h3>
                 <p
                   style={{
@@ -1029,7 +771,7 @@ export default function Dashboard() {
                     margin: "4px 0 0 0",
                   }}
                 >
-                  Distribution par site de production (stacked view)
+                  Distribution by production site (stacked view)
                 </p>
               </div>
             </div>
@@ -1080,11 +822,11 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Deux colonnes : Total par plant + avec breakdown clients */}
+        {/* Two columns: Total by plant + Customer breakdown */}
         <div
           style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}
         >
-          {/* Total par plant - simple */}
+          {/* Total by plant - simple */}
           <div
             style={{
               background: "white",
@@ -1114,7 +856,9 @@ export default function Dashboard() {
                     justifyContent: "center",
                     fontSize: 24,
                   }}
-                ></div>
+                >
+                  🏭
+                </div>
                 <div>
                   <h3
                     style={{
@@ -1124,7 +868,7 @@ export default function Dashboard() {
                       color: INDUSTRIAL_COLORS.primary,
                     }}
                   >
-                    Total réclamations par usine
+                    Total Complaints by Plant
                   </h3>
                   <p
                     style={{
@@ -1133,7 +877,7 @@ export default function Dashboard() {
                       margin: "4px 0 0 0",
                     }}
                   >
-                    Classement des sites
+                    Site ranking
                   </p>
                 </div>
               </div>
@@ -1187,7 +931,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Total par plant avec breakdown clients (stacked) */}
+          {/* Total by plant with customer breakdown (stacked) */}
           <div
             style={{
               background: "white",
@@ -1217,7 +961,9 @@ export default function Dashboard() {
                     justifyContent: "center",
                     fontSize: 24,
                   }}
-                ></div>
+                >
+                  👥
+                </div>
                 <div>
                   <h3
                     style={{
@@ -1227,7 +973,7 @@ export default function Dashboard() {
                       color: INDUSTRIAL_COLORS.primary,
                     }}
                   >
-                    Origine: Usine vs Client
+                    Origin: Plant vs Customer
                   </h3>
                   <p
                     style={{
@@ -1236,7 +982,7 @@ export default function Dashboard() {
                       margin: "4px 0 0 0",
                     }}
                   >
-                    Breakdown par client
+                    Breakdown by customer
                   </p>
                 </div>
               </div>
@@ -1278,31 +1024,31 @@ export default function Dashboard() {
                     <Bar
                       dataKey="customer1"
                       stackId="a"
-                      name="Client principal"
+                      name="Main Customer"
                       fill="#4A7CFF"
                     />
                     <Bar
                       dataKey="customer2"
                       stackId="a"
-                      name="Client 2"
+                      name="Customer 2"
                       fill="#7ED321"
                     />
                     <Bar
                       dataKey="customer3"
                       stackId="a"
-                      name="Client 3"
+                      name="Customer 3"
                       fill="#FF8C42"
                     />
                     <Bar
                       dataKey="customer4"
                       stackId="a"
-                      name="Client 4"
+                      name="Customer 4"
                       fill="#9B59B6"
                     />
                     <Bar
                       dataKey="customer5"
                       stackId="a"
-                      name="Autres"
+                      name="Others"
                       fill="#34495E"
                     />
                   </BarChart>
@@ -1342,7 +1088,9 @@ export default function Dashboard() {
                   justifyContent: "center",
                   fontSize: 24,
                 }}
-              ></div>
+              >
+                🌍
+              </div>
               <div>
                 <h3
                   style={{
@@ -1352,7 +1100,7 @@ export default function Dashboard() {
                     color: INDUSTRIAL_COLORS.primary,
                   }}
                 >
-                  Clients vs Sites AvoCarbon
+                  Customers vs AvoCarbon Sites
                 </h3>
                 <p
                   style={{
@@ -1361,7 +1109,7 @@ export default function Dashboard() {
                     margin: "4px 0 0 0",
                   }}
                 >
-                  Distribution des réclamations par client et site de production
+                  Complaints distribution by customer and production site
                 </p>
               </div>
             </div>
@@ -1414,11 +1162,11 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* CSI/CSII + Delay Time */}
+        {/* Status Monthly + Delay Time */}
         <div
           style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}
         >
-          {/* CSI/CSII */}
+          {/* Status Monthly */}
           <div
             style={{
               background: "white",
@@ -1448,7 +1196,9 @@ export default function Dashboard() {
                     justifyContent: "center",
                     fontSize: 24,
                   }}
-                ></div>
+                >
+                  ⚠️
+                </div>
                 <div>
                   <h3
                     style={{
@@ -1458,7 +1208,7 @@ export default function Dashboard() {
                       color: INDUSTRIAL_COLORS.primary,
                     }}
                   >
-                    CSI et CSII mensuels
+                    Monthly Status Distribution
                   </h3>
                   <p
                     style={{
@@ -1467,7 +1217,7 @@ export default function Dashboard() {
                       margin: "4px 0 0 0",
                     }}
                   >
-                    Classification par type
+                    Classification by status type
                   </p>
                 </div>
               </div>
@@ -1475,7 +1225,7 @@ export default function Dashboard() {
             <div style={{ padding: 28 }}>
               <div style={{ width: "100%", height: 340 }}>
                 <ResponsiveContainer>
-                  <BarChart data={csiCsiiMonthly}>
+                  <BarChart data={statusMonthly}>
                     <CartesianGrid
                       strokeDasharray="3 3"
                       stroke="#E0E0E0"
@@ -1503,14 +1253,35 @@ export default function Dashboard() {
                       cursor={{ fill: "rgba(231, 76, 60, 0.05)" }}
                     />
                     <Legend iconType="circle" />
-                    <Bar dataKey="C2" stackId="a" name="C2" fill="#FF8C42" />
-                    <Bar dataKey="C1" stackId="a" name="C1" fill="#27AE60" />
-                    <Bar dataKey="WR" stackId="a" name="WR" fill="#E74C3C" />
                     <Bar
-                      dataKey="QualityAlert"
+                      dataKey="open"
                       stackId="a"
-                      name="Quality Alert"
+                      name="Open"
+                      fill="#FF8C42"
+                    />
+                    <Bar
+                      dataKey="in_progress"
+                      stackId="a"
+                      name="In Progress"
+                      fill="#3498DB"
+                    />
+                    <Bar
+                      dataKey="under_review"
+                      stackId="a"
+                      name="Under Review"
                       fill="#9B59B6"
+                    />
+                    <Bar
+                      dataKey="resolved"
+                      stackId="a"
+                      name="Resolved"
+                      fill="#27AE60"
+                    />
+                    <Bar
+                      dataKey="closed"
+                      stackId="a"
+                      name="Closed"
+                      fill="#95A5A6"
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -1548,7 +1319,9 @@ export default function Dashboard() {
                     justifyContent: "center",
                     fontSize: 24,
                   }}
-                ></div>
+                >
+                  ⏱️
+                </div>
                 <div>
                   <h3
                     style={{
@@ -1558,7 +1331,7 @@ export default function Dashboard() {
                       color: INDUSTRIAL_COLORS.primary,
                     }}
                   >
-                    Temps de traitement
+                    Processing Time
                   </h3>
                   <p
                     style={{
@@ -1574,47 +1347,70 @@ export default function Dashboard() {
             </div>
             <div style={{ padding: 28 }}>
               <div style={{ width: "100%", height: 340 }}>
-                <ResponsiveContainer>
-                  <BarChart data={delayTime}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#E0E0E0"
-                      strokeOpacity={0.5}
-                    />
-                    <XAxis
-                      dataKey="plant"
-                      tick={{ fill: "#78909C", fontSize: 11, fontWeight: 600 }}
-                      tickLine={{ stroke: "#E0E0E0" }}
-                      axisLine={{ stroke: "#E0E0E0" }}
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis
-                      tickFormatter={secondsToHmsShort}
-                      tick={{ fill: "#78909C", fontSize: 12, fontWeight: 600 }}
-                      tickLine={{ stroke: "#E0E0E0" }}
-                      axisLine={{ stroke: "#E0E0E0" }}
-                    />
-                    <Tooltip
-                      formatter={(v: any) => secondsToHmsShort(Number(v))}
-                      labelFormatter={(l) => `Plant: ${l}`}
-                      contentStyle={{
-                        background: "rgba(255,255,255,0.98)",
-                        border: "2px solid #9B59B6",
-                        borderRadius: 12,
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
-                        padding: "12px 16px",
-                      }}
-                      cursor={{ fill: "rgba(155, 89, 182, 0.05)" }}
-                    />
-                    <Legend iconType="circle" />
-                    <Bar dataKey="d13" name="D1→D3" fill="#4A7CFF" />
-                    <Bar dataKey="d15" name="D1→D5" fill="#9B59B6" />
-                    <Bar dataKey="d18" name="D1→D8" fill="#E74C3C" />
-                    <Bar dataKey="llc" name="LLC" fill="#F39C12" />
-                  </BarChart>
-                </ResponsiveContainer>
+                {delayTime.length > 0 ? (
+                  <ResponsiveContainer>
+                    <BarChart data={delayTime}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="#E0E0E0"
+                        strokeOpacity={0.5}
+                      />
+                      <XAxis
+                        dataKey="plant"
+                        tick={{
+                          fill: "#78909C",
+                          fontSize: 11,
+                          fontWeight: 600,
+                        }}
+                        tickLine={{ stroke: "#E0E0E0" }}
+                        axisLine={{ stroke: "#E0E0E0" }}
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                      />
+                      <YAxis
+                        tickFormatter={secondsToHmsShort}
+                        tick={{
+                          fill: "#78909C",
+                          fontSize: 12,
+                          fontWeight: 600,
+                        }}
+                        tickLine={{ stroke: "#E0E0E0" }}
+                        axisLine={{ stroke: "#E0E0E0" }}
+                      />
+                      <Tooltip
+                        formatter={(v: any) => secondsToHmsShort(Number(v))}
+                        labelFormatter={(l) => `Plant: ${l}`}
+                        contentStyle={{
+                          background: "rgba(255,255,255,0.98)",
+                          border: "2px solid #9B59B6",
+                          borderRadius: 12,
+                          boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+                          padding: "12px 16px",
+                        }}
+                        cursor={{ fill: "rgba(155, 89, 182, 0.05)" }}
+                      />
+                      <Legend iconType="circle" />
+                      <Bar dataKey="d13" name="D1→D3" fill="#4A7CFF" />
+                      <Bar dataKey="d15" name="D1→D5" fill="#9B59B6" />
+                      <Bar dataKey="d18" name="D1→D8" fill="#E74C3C" />
+                      <Bar dataKey="llc" name="LLC" fill="#F39C12" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div
+                    style={{
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#9CA3AF",
+                      fontSize: 14,
+                    }}
+                  >
+                    No delay time data available
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1653,7 +1449,9 @@ export default function Dashboard() {
                     justifyContent: "center",
                     fontSize: 24,
                   }}
-                ></div>
+                >
+                  🔍
+                </div>
                 <div>
                   <h3
                     style={{
@@ -1663,7 +1461,7 @@ export default function Dashboard() {
                       color: INDUSTRIAL_COLORS.primary,
                     }}
                   >
-                    Type de défaut
+                    Defect Type
                   </h3>
                   <p
                     style={{
@@ -1672,53 +1470,76 @@ export default function Dashboard() {
                       margin: "4px 0 0 0",
                     }}
                   >
-                    Classification qualité
+                    Quality classification
                   </p>
                 </div>
               </div>
             </div>
             <div style={{ padding: 28 }}>
               <div style={{ width: "100%", height: 280 }}>
-                <ResponsiveContainer>
-                  <BarChart data={defectType}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#E0E0E0"
-                      strokeOpacity={0.5}
-                    />
-                    <XAxis
-                      dataKey="type"
-                      tick={{ fill: "#78909C", fontSize: 12, fontWeight: 600 }}
-                      tickLine={{ stroke: "#E0E0E0" }}
-                      axisLine={{ stroke: "#E0E0E0" }}
-                    />
-                    <YAxis
-                      tick={{ fill: "#78909C", fontSize: 13, fontWeight: 600 }}
-                      tickLine={{ stroke: "#E0E0E0" }}
-                      axisLine={{ stroke: "#E0E0E0" }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "rgba(255,255,255,0.98)",
-                        border: "2px solid #00BCD4",
-                        borderRadius: 12,
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
-                        padding: "12px 16px",
-                      }}
-                      cursor={{ fill: "rgba(0, 188, 212, 0.05)" }}
-                    />
-                    <Bar
-                      dataKey="count"
-                      fill="#00BCD4"
-                      radius={[8, 8, 0, 0]}
-                      label={{
-                        position: "top",
-                        fill: INDUSTRIAL_COLORS.primary,
-                        fontWeight: 700,
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                {defectType.length > 0 ? (
+                  <ResponsiveContainer>
+                    <BarChart data={defectType}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="#E0E0E0"
+                        strokeOpacity={0.5}
+                      />
+                      <XAxis
+                        dataKey="type"
+                        tick={{
+                          fill: "#78909C",
+                          fontSize: 12,
+                          fontWeight: 600,
+                        }}
+                        tickLine={{ stroke: "#E0E0E0" }}
+                        axisLine={{ stroke: "#E0E0E0" }}
+                      />
+                      <YAxis
+                        tick={{
+                          fill: "#78909C",
+                          fontSize: 13,
+                          fontWeight: 600,
+                        }}
+                        tickLine={{ stroke: "#E0E0E0" }}
+                        axisLine={{ stroke: "#E0E0E0" }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "rgba(255,255,255,0.98)",
+                          border: "2px solid #00BCD4",
+                          borderRadius: 12,
+                          boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+                          padding: "12px 16px",
+                        }}
+                        cursor={{ fill: "rgba(0, 188, 212, 0.05)" }}
+                      />
+                      <Bar
+                        dataKey="count"
+                        fill="#00BCD4"
+                        radius={[8, 8, 0, 0]}
+                        label={{
+                          position: "top",
+                          fill: INDUSTRIAL_COLORS.primary,
+                          fontWeight: 700,
+                        }}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div
+                    style={{
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#9CA3AF",
+                      fontSize: 14,
+                    }}
+                  >
+                    No defect data available
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1752,7 +1573,9 @@ export default function Dashboard() {
                     justifyContent: "center",
                     fontSize: 24,
                   }}
-                ></div>
+                >
+                  📦
+                </div>
                 <div>
                   <h3
                     style={{
@@ -1762,7 +1585,7 @@ export default function Dashboard() {
                       color: INDUSTRIAL_COLORS.primary,
                     }}
                   >
-                    Type de produit
+                    Product Type
                   </h3>
                   <p
                     style={{
@@ -1771,59 +1594,82 @@ export default function Dashboard() {
                       margin: "4px 0 0 0",
                     }}
                   >
-                    Catégories de produits
+                    Product categories
                   </p>
                 </div>
               </div>
             </div>
             <div style={{ padding: 28 }}>
               <div style={{ width: "100%", height: 280 }}>
-                <ResponsiveContainer>
-                  <BarChart data={productType}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#E0E0E0"
-                      strokeOpacity={0.5}
-                    />
-                    <XAxis
-                      dataKey="type"
-                      tick={{ fill: "#78909C", fontSize: 12, fontWeight: 600 }}
-                      tickLine={{ stroke: "#E0E0E0" }}
-                      axisLine={{ stroke: "#E0E0E0" }}
-                    />
-                    <YAxis
-                      tick={{ fill: "#78909C", fontSize: 13, fontWeight: 600 }}
-                      tickLine={{ stroke: "#E0E0E0" }}
-                      axisLine={{ stroke: "#E0E0E0" }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "rgba(255,255,255,0.98)",
-                        border: "2px solid #7ED321",
-                        borderRadius: 12,
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
-                        padding: "12px 16px",
-                      }}
-                      cursor={{ fill: "rgba(126, 211, 33, 0.05)" }}
-                    />
-                    <Bar
-                      dataKey="count"
-                      fill="#7ED321"
-                      radius={[8, 8, 0, 0]}
-                      label={{
-                        position: "top",
-                        fill: INDUSTRIAL_COLORS.primary,
-                        fontWeight: 700,
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                {productType.length > 0 ? (
+                  <ResponsiveContainer>
+                    <BarChart data={productType}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="#E0E0E0"
+                        strokeOpacity={0.5}
+                      />
+                      <XAxis
+                        dataKey="type"
+                        tick={{
+                          fill: "#78909C",
+                          fontSize: 12,
+                          fontWeight: 600,
+                        }}
+                        tickLine={{ stroke: "#E0E0E0" }}
+                        axisLine={{ stroke: "#E0E0E0" }}
+                      />
+                      <YAxis
+                        tick={{
+                          fill: "#78909C",
+                          fontSize: 13,
+                          fontWeight: 600,
+                        }}
+                        tickLine={{ stroke: "#E0E0E0" }}
+                        axisLine={{ stroke: "#E0E0E0" }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "rgba(255,255,255,0.98)",
+                          border: "2px solid #7ED321",
+                          borderRadius: 12,
+                          boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+                          padding: "12px 16px",
+                        }}
+                        cursor={{ fill: "rgba(126, 211, 33, 0.05)" }}
+                      />
+                      <Bar
+                        dataKey="count"
+                        fill="#7ED321"
+                        radius={[8, 8, 0, 0]}
+                        label={{
+                          position: "top",
+                          fill: INDUSTRIAL_COLORS.primary,
+                          fontWeight: 700,
+                        }}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div
+                    style={{
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#9CA3AF",
+                      fontSize: 14,
+                    }}
+                  >
+                    No product data available
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Cost Distribution */}
+        {/* Cost Distribution - Placeholder */}
         <div
           style={{
             background: "white",
@@ -1865,7 +1711,7 @@ export default function Dashboard() {
                     color: INDUSTRIAL_COLORS.primary,
                   }}
                 >
-                  Distribution des coûts par phase
+                  Cost Distribution by Phase
                 </h3>
                 <p
                   style={{
@@ -1874,7 +1720,7 @@ export default function Dashboard() {
                     margin: "4px 0 0 0",
                   }}
                 >
-                  Répartition en pourcentage (D1-D3 / D4-D5 / D6-D8 / LLC)
+                  Percentage distribution (D1-D3 / D4-D5 / D6-D8 / LLC)
                 </p>
               </div>
             </div>
@@ -1882,88 +1728,15 @@ export default function Dashboard() {
           <div style={{ padding: 32 }}>
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: 32,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minHeight: 200,
+                color: "#9CA3AF",
+                fontSize: 14,
               }}
             >
-              {[
-                { data: costD13, title: "D1–D3", color: "#4A7CFF" },
-                { data: costD45, title: "D4–D5", color: "#27AE60" },
-                { data: costD68, title: "D6–D8", color: "#E74C3C" },
-                { data: costLLC, title: "LLC", color: "#F39C12" },
-              ].map(({ data, title, color }) => (
-                <div key={title}>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      marginBottom: 16,
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 32,
-                        height: 32,
-                        background: color,
-                        borderRadius: 8,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "white",
-                        fontWeight: 700,
-                        fontSize: 14,
-                      }}
-                    >
-                      {title.split("–")[0]}
-                    </div>
-                    <h4
-                      style={{
-                        fontSize: 16,
-                        fontWeight: 700,
-                        margin: 0,
-                        color: INDUSTRIAL_COLORS.primary,
-                      }}
-                    >
-                      {title}
-                    </h4>
-                  </div>
-                  <div style={{ width: "100%", height: 240 }}>
-                    <ResponsiveContainer>
-                      <PieChart>
-                        <Tooltip
-                          formatter={(v: any) => `${v}%`}
-                          contentStyle={{
-                            background: "rgba(255,255,255,0.98)",
-                            border: `2px solid ${color}`,
-                            borderRadius: 12,
-                            boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
-                            padding: "12px 16px",
-                          }}
-                        />
-                        <Pie
-                          data={data}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={85}
-                          label={({ value }) => `${value}%`}
-                          labelLine={{ stroke: "#9ca3af", strokeWidth: 1 }}
-                        >
-                          {data.map((entry, i) => (
-                            <Cell
-                              key={i}
-                              fill={PLANT_COLORS[entry.name as Plant] || color}
-                            />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              ))}
+              Cost tracking not yet implemented
             </div>
           </div>
         </div>
@@ -2006,11 +1779,11 @@ export default function Dashboard() {
               marginBottom: 4,
             }}
           >
-            Système de gestion qualité industriel
+            Industrial Quality Management System
           </div>
           <div style={{ fontSize: 13, color: "#78909C" }}>
-            Dashboard temps réel • Données consolidées et mises à jour
-            automatiquement • Export disponible
+            Real-time dashboard • Consolidated and auto-updated data • Export
+            available
           </div>
         </div>
       </div>
