@@ -360,7 +360,7 @@ export default function D2({ onRefreshSteps, onValidationUpdate }: D2Props) {
       </div>
 
       {/* ── Section 4: Impact & Evidence ─────────────────────────────────── */}
-      <div className="section">
+      {/* <div className="section">
         <h3>Impact &amp; Evidence</h3>
 
         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -431,7 +431,7 @@ export default function D2({ onRefreshSteps, onValidationUpdate }: D2Props) {
             rows={3}
           />
         </div>
-      </div>
+      </div> */}
     </StepLayout>
   );
 }
