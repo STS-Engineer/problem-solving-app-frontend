@@ -37,12 +37,29 @@ const staticGuidelinesByStep: Record<StepCode, CoachMessage[]> = {
     {
       type: "note",
       time: "—",
-      title: "Expected Requirements",
+      title: "Section 1 — 5W2H",
       bullets: [
-        "Complete 4W2H description (What, Where, When, Who, How, How Many)",
-        "Standard or specification referenced",
-        "IS / IS NOT analysis completed",
-        "Evidence and quantified data provided",
+        "Problem description with quantified impact",
+        "All 7 fields: What, Where, When, Who, Why, How, How Many",
+      ],
+    },
+    {
+      type: "note",
+      time: "—",
+      title: "Section 2 — Deviation vs Standard",
+      bullets: [
+        "Applicable standard or specification referenced",
+        "Expected vs observed situation clearly described",
+        "Evidence documents attached",
+      ],
+    },
+    {
+      type: "note",
+      time: "—",
+      title: "Section 3 — IS / IS NOT",
+      bullets: [
+        "At least 2 factor rows filled (Product, Time, Lot, Pattern)",
+        "Both IS and IS NOT columns completed per factor",
       ],
     },
   ],

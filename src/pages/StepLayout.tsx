@@ -1,3 +1,4 @@
+// src/pages/StepLayout.tsx
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { StepMeta, STEPS } from "../lib/steps";
@@ -15,6 +16,7 @@ interface StepLayoutProps {
   onSaveDraft: () => void;
   onSubmit: () => void;
   saving: boolean;
+  hideFooter?: boolean; // ← NEW
 }
 
 export default function StepLayout({
@@ -23,25 +25,21 @@ export default function StepLayout({
   onSaveDraft,
   onSubmit,
   saving,
+  hideFooter = false, // ← NEW
 }: StepLayoutProps) {
   const navigate = useNavigate();
   const { complaintId } = useParams<{ complaintId: string }>();
 
-  // Find current step index
   const currentIndex = STEPS.findIndex((s) => s.code === meta.code);
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex < STEPS.length - 1;
 
   const handlePrevious = () => {
-    if (hasPrevious) {
+    if (hasPrevious)
       navigate(`/8d/${complaintId}/${STEPS[currentIndex - 1].code}`);
-    }
   };
-
   const handleNext = () => {
-    if (hasNext) {
-      navigate(`/8d/${complaintId}/${STEPS[currentIndex + 1].code}`);
-    }
+    if (hasNext) navigate(`/8d/${complaintId}/${STEPS[currentIndex + 1].code}`);
   };
 
   return (
@@ -135,7 +133,6 @@ export default function StepLayout({
               <span>←</span>
               <span>Previous Step</span>
             </button>
-
             <button
               onClick={handleNext}
               disabled={!hasNext}
@@ -165,36 +162,17 @@ export default function StepLayout({
       {/* Content */}
       <div style={{ padding: 32 }}>{children}</div>
 
-      {/* Footer Actions */}
+      {/* Footer — Save Draft always visible; Submit hidden when hideFooter=true */}
       <div
         style={{
           padding: "20px 32px",
           borderTop: "1px solid #E0E0E0",
           background: "linear-gradient(135deg, #F8F9FA 0%, #FFFFFF 100%)",
           display: "flex",
-          justifyContent: "space-between",
+          justifyContent: "flex-end",
           alignItems: "center",
         }}
       >
-        {/* <button
-          style={{
-            padding: "12px 24px",
-            borderRadius: 8,
-            border: `2px solid ${INDUSTRIAL_COLORS.accent}`,
-            background: "white",
-            color: INDUSTRIAL_COLORS.accent,
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          <span>📎</span>
-          <span>Add Evidence</span>
-        </button> */}
-
         <div style={{ display: "flex", gap: 12 }}>
           <button
             onClick={onSaveDraft}
@@ -218,27 +196,29 @@ export default function StepLayout({
             <span>{saving ? "Saving..." : "Save Draft"}</span>
           </button>
 
-          <button
-            onClick={onSubmit}
-            disabled={saving}
-            style={{
-              padding: "12px 28px",
-              borderRadius: 8,
-              border: "none",
-              background: "linear-gradient(135deg, #27AE60 0%, #1E8449 100%)",
-              color: "white",
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: saving ? "not-allowed" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              opacity: saving ? 0.6 : 1,
-            }}
-          >
-            <span>✅</span>
-            <span>{saving ? "Submitting..." : "Validate & Save"}</span>
-          </button>
+          {!hideFooter && (
+            <button
+              onClick={onSubmit}
+              disabled={saving}
+              style={{
+                padding: "12px 28px",
+                borderRadius: 8,
+                border: "none",
+                background: "linear-gradient(135deg, #27AE60 0%, #1E8449 100%)",
+                color: "white",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: saving ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                opacity: saving ? 0.6 : 1,
+              }}
+            >
+              <span>✅</span>
+              <span>{saving ? "Submitting..." : "Validate & Save"}</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

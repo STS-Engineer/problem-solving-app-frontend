@@ -9,7 +9,6 @@ interface TeamMember {
   name: string;
   function: string;
   department: string;
-  role: string;
 }
 
 interface D1FormData {
@@ -34,8 +33,8 @@ export default function D1({ onRefreshSteps, onValidationUpdate }: D1Props) {
     handleSubmit,
   } = useStepData<D1FormData>("D1", {
     team_members: [
-      { name: "", function: "", department: "", role: "" },
-      { name: "", function: "", department: "", role: "" },
+      { name: "", function: "", department: "" },
+      { name: "", function: "", department: "" },
     ],
   });
 
@@ -54,7 +53,7 @@ export default function D1({ onRefreshSteps, onValidationUpdate }: D1Props) {
       ...data,
       team_members: [
         ...data.team_members,
-        { name: "", function: "", department: "", role: "" },
+        { name: "", function: "", department: "" },
       ],
     });
   };
@@ -100,9 +99,8 @@ export default function D1({ onRefreshSteps, onValidationUpdate }: D1Props) {
             <thead>
               <tr>
                 <th className="min-w-[180px]">Name *</th>
-                <th className="min-w-[160px]">Function *</th>
-                <th className="min-w-[140px]">Department *</th>
-                <th className="min-w-[140px]">Role *</th>
+                <th className="min-w-[160px]">Department *</th>
+                <th className="min-w-[140px]">Function *</th>
                 <th className="min-w-[80px]">Actions</th>
               </tr>
             </thead>
@@ -120,49 +118,150 @@ export default function D1({ onRefreshSteps, onValidationUpdate }: D1Props) {
                     />
                   </td>
                   <td>
-                    <input
-                      value={member.function}
-                      onChange={(e) =>
-                        handleMemberChange(index, "function", e.target.value)
+                    <select
+                      className="w-full font-medium"
+                      value={
+                        member.department === "" ||
+                        [
+                          "production",
+                          "maintenance",
+                          "engineering",
+                          "quality",
+                          "logistics",
+                          "supplier_quality",
+                          "other",
+                        ].includes(member.department)
+                          ? member.department
+                          : "other"
                       }
-                      placeholder="Job title"
-                    />
-                  </td>
-                  <td>
-                    <input
-                      value={member.department}
-                      onChange={(e) =>
-                        handleMemberChange(index, "department", e.target.value)
-                      }
-                      placeholder="Department"
-                    />
+                      onChange={(e) => {
+                        if (e.target.value === "other") {
+                          handleMemberChange(index, "department", "other");
+                        } else {
+                          handleMemberChange(
+                            index,
+                            "department",
+                            e.target.value,
+                          );
+                        }
+                      }}
+                    >
+                      <option value="">Select Department...</option>
+                      <option value="production">Production</option>
+                      <option value="maintenance">Maintenance</option>
+                      <option value="engineering">Engineering</option>
+                      <option value="quality">Quality</option>
+                      <option value="logistics">Logistics</option>
+                      <option value="supplier_quality">Supplier Quality</option>
+                      <option value="other">Other</option>
+                    </select>
+                    {(member.department === "other" ||
+                      (member.department !== "" &&
+                        ![
+                          "production",
+                          "maintenance",
+                          "engineering",
+                          "quality",
+                          "logistics",
+                          "supplier_quality",
+                          "other",
+                        ].includes(member.department))) && (
+                      <input
+                        className="w-full font-medium mt-1"
+                        placeholder="Please specify..."
+                        value={
+                          [
+                            "production",
+                            "maintenance",
+                            "engineering",
+                            "quality",
+                            "logistics",
+                            "supplier_quality",
+                            "other",
+                          ].includes(member.department)
+                            ? ""
+                            : member.department
+                        }
+                        onChange={(e) =>
+                          handleMemberChange(
+                            index,
+                            "department",
+                            e.target.value,
+                          )
+                        }
+                      />
+                    )}
                   </td>
                   <td>
                     <select
                       className="w-full font-medium"
-                      value={member.role}
-                      onChange={(e) =>
-                        handleMemberChange(index, "role", e.target.value)
+                      value={
+                        member.function === "" ||
+                        [
+                          "operator",
+                          "line_leader",
+                          "supervisor",
+                          "technician",
+                          "engineer",
+                          "team_leader",
+                          "project_manager",
+                          "other",
+                        ].includes(member.function)
+                          ? member.function
+                          : "other"
                       }
+                      onChange={(e) => {
+                        if (e.target.value === "other") {
+                          handleMemberChange(index, "function", "other");
+                        } else {
+                          handleMemberChange(index, "function", e.target.value);
+                        }
+                      }}
                     >
-                      <option value="">Select role...</option>
-                      <option value="production">
-                        Production (operator, line leader, supervisor)
-                      </option>
-                      <option value="maintenance">
-                        Maintenance (if equipment involved)
-                      </option>
-                      <option value="engineering">
-                        Process or Manufacturing Engineering
-                      </option>
-                      <option value="logistics">
-                        Logistics / Supplier Quality
-                      </option>
-                      <option value="team_leader">
-                        Team leader or project manager
-                      </option>
+                      <option value="">Select Function...</option>
+                      <option value="operator">Operator</option>
+                      <option value="line_leader">Line Leader</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="engineer">Engineer</option>
+                      <option value="team_leader">Team Leader</option>
+                      <option value="project_manager">Project Manager</option>
                       <option value="other">Other</option>
                     </select>
+                    {(member.function === "other" ||
+                      (member.function !== "" &&
+                        ![
+                          "operator",
+                          "line_leader",
+                          "supervisor",
+                          "technician",
+                          "engineer",
+                          "team_leader",
+                          "project_manager",
+                          "other",
+                        ].includes(member.function))) && (
+                      <input
+                        className="w-full font-medium mt-1"
+                        placeholder="Please specify..."
+                        value={
+                          [
+                            "operator",
+                            "line_leader",
+                            "supervisor",
+                            "technician",
+                            "engineer",
+                            "manager",
+                            "team_leader",
+                            "project_manager",
+                            "other",
+                          ].includes(member.function)
+                            ? ""
+                            : member.function
+                        }
+                        onChange={(e) =>
+                          handleMemberChange(index, "function", e.target.value)
+                        }
+                      />
+                    )}
                   </td>
                   <td>
                     {data.team_members.length > 1 && (

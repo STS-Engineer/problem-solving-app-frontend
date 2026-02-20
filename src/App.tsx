@@ -16,7 +16,7 @@ import D6 from "./pages/8d/[id]/D6";
 import D7 from "./pages/8d/[id]/D7";
 import D8 from "./pages/8d/[id]/D8";
 import {
-  getStepsByComplaintId,
+  getStepsSummaryByComplaintId,
   getStepValidation,
   ValidationResult,
 } from "./services/api/reports";
@@ -92,7 +92,7 @@ function EightDShell() {
       setStepsLoading(true);
 
       // ✅ Returns StepData[] — the extraction of .steps is done in reports.ts
-      const stepsArray = await getStepsByComplaintId(complaintIdNum);
+      const stepsArray = await getStepsSummaryByComplaintId(complaintIdNum);
 
       const formatted = {} as StepsState;
       stepsArray.forEach((s) => {
@@ -106,15 +106,15 @@ function EightDShell() {
 
       // Load validation for current step if it's already been validated/rejected
       const currentStepData = stepsArray.find((s) => s.step_code === stepCode);
-      if (
-        currentStepData &&
-        (currentStepData.status === "validated" ||
-          currentStepData.status === "rejected")
-      ) {
-        loadValidation(currentStepData.id);
-      } else {
-        setValidation(null);
-      }
+      // if (
+      //   currentStepData &&
+      //   (currentStepData.status === "validated" ||
+      //     currentStepData.status === "rejected")
+      // ) {
+      //   loadValidation(currentStepData.id);
+      // } else {
+      //   setValidation(null);
+      // }
     } catch (e) {
       console.error("Error loading steps:", e);
       setSteps(null);

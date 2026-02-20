@@ -61,13 +61,18 @@ export function useStepData<T>(stepCode: string, defaultData: T) {
 
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    loadStepData();
+  const loadedKeyRef = useRef<string | null>(null);
 
-    return () => {
-      if (navTimerRef.current) clearTimeout(navTimerRef.current);
-    };
-  }, [complaintId, stepCode]);
+useEffect(() => {
+  const key = `${complaintId}-${stepCode}`;
+  if (loadedKeyRef.current === key) return; // already loaded, skip
+  loadedKeyRef.current = key;
+  loadStepData();
+
+  return () => {
+    if (navTimerRef.current) clearTimeout(navTimerRef.current);
+  };
+}, [complaintId, stepCode]);
 
   const loadStepData = async () => {
     try {

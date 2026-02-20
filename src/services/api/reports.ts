@@ -19,6 +19,31 @@ export interface ValidationResult {
   language_detected: string;
 }
 
+export interface SectionValidationResult {
+  decision: 'pass' | 'fail';
+  missing_fields: string[];
+  quality_issues: string[];
+  suggestions: string[];
+  field_improvements: Record<string, string>;
+  overall_assessment: string;
+  validated_at: string | null;
+}
+
+export interface SubmitSectionResponse {
+  success: boolean;
+  step_id: number;
+  section_key: string;
+  validation: ValidationResult;
+  all_sections_passed: boolean;
+  passed_sections: string[];
+  remaining_sections: string[];
+}
+
+export interface AllSectionValidationsResponse {
+  step_id: number;
+  sections: Record<string, SectionValidationResult>;
+}
+
 export interface SubmitStepResponse {
   success: boolean;
   step_id: number;
@@ -103,6 +128,11 @@ export async function getStepByComplaintCode(
   return response.json();
 }
 
+export async function getStepsSummaryByComplaintId(complaintId: number): Promise<StepData[]> {
+  const res = await axios.get(`${API_URL}/api/v1/steps/complaint/${complaintId}/steps/summary`);
+  return res.data as StepData[];
+}
+
 export async function getCurrentStepByComplaint(complaintId: number): Promise<StepData> {
   const response = await fetch(
     `${API_URL}/api/v1/reports/complaint/${complaintId}/current-step`,
@@ -173,4 +203,33 @@ export function formatValidationSummary(validation: ValidationResult): string {
   }
   const issues = getTotalIssues(validation);
   return `⚠️ ${issues} issue${issues !== 1 ? "s" : ""} found`;
+}
+
+export async function submitSection(
+  stepId: number,
+  sectionKey: string,
+): Promise<SubmitSectionResponse> {
+  const response = await fetch(`${API_URL}/api/v1/steps/${stepId}/submit-section`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ section_key: sectionKey }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || "Error submitting section");
+  }
+  return response.json();
+}
+
+export async function getSectionValidations(
+  stepId: number,
+): Promise<AllSectionValidationsResponse> {
+  const response = await fetch(`${API_URL}/api/v1/steps/${stepId}/section-validations`, {
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || "Section validations not found");
+  }
+  return response.json();
 }
