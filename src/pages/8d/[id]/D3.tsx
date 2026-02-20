@@ -1,4 +1,6 @@
+// src/pages/8d/[id]/D3.tsx
 import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useStepData } from "../../../hooks/useStepData";
 import StepLayout from "../../StepLayout";
 import { STEPS } from "../../../lib/steps";
@@ -61,11 +63,10 @@ interface D3Props {
   onValidationUpdate: (validation: ValidationResult | null) => void;
 }
 
-// ── Sections ─────────────────────────────────────────────────────────────────
+// ── 2 sections only ───────────────────────────────────────────────────────────
 const SECTIONS = [
-  { id: 1, key: "defected_parts", title: "Defected Parts", icon: "🔴" },
-  { id: 2, key: "suspected_parts", title: "Suspected & Alert", icon: "⚠️" },
-  { id: 3, key: "restart", title: "Restart & Responsible", icon: "🔄" },
+  { id: 1, key: "containment", title: "Containment", icon: "🔴" },
+  { id: 2, key: "restart", title: "Restart & Responsible", icon: "🔄" },
 ] as const;
 
 type SectionKey = (typeof SECTIONS)[number]["key"];
@@ -113,7 +114,8 @@ const DEFAULT_SUSPECTED: SuspectedPartsRow[] = [
 // ── Local pre-validation ──────────────────────────────────────────────────────
 function localValidate(sectionKey: SectionKey, data: D3FormData): string[] {
   const errors: string[] = [];
-  if (sectionKey === "defected_parts") {
+
+  if (sectionKey === "containment") {
     const d = data.defected_part_status;
     if (!d.returned && !d.isolated && !d.identified)
       errors.push("At least one defected part status must be checked");
@@ -123,8 +125,6 @@ function localValidate(sectionKey: SectionKey, data: D3FormData): string[] {
       errors.push(
         "Identification method is required when 'Identified' is checked",
       );
-  }
-  if (sectionKey === "suspected_parts") {
     const hasAnyRow = data.suspected_parts_status.some(
       (r) => r.inventory.trim() || r.actions.trim(),
     );
@@ -134,6 +134,7 @@ function localValidate(sectionKey: SectionKey, data: D3FormData): string[] {
     if (!alertChecks.some(Boolean))
       errors.push("At least one alert recipient must be checked");
   }
+
   if (sectionKey === "restart") {
     if (!data.restart_production.approved_by.trim())
       errors.push("Restart approval person is required");
@@ -142,26 +143,30 @@ function localValidate(sectionKey: SectionKey, data: D3FormData): string[] {
     if (!data.containment_responsible.trim())
       errors.push("Containment responsible person is required");
   }
+
   return errors;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
   const meta = STEPS.find((s) => s.code === "D3")!;
+  const navigate = useNavigate();
+  const { complaintId } = useParams<{ complaintId: string }>();
 
   const [currentSection, setCurrentSection] = useState(1);
   const [sectionStatus, setSectionStatus] = useState<
     Record<SectionKey, SectionStatus>
   >({
-    defected_parts: "idle",
-    suspected_parts: "idle",
+    containment: "idle",
     restart: "idle",
   });
   const [sectionValidations, setSectionValidations] = useState<
     Record<SectionKey, SectionValidationResult | null>
-  >({ defected_parts: null, suspected_parts: null, restart: null });
+  >({ containment: null, restart: null });
   const [localErrors, setLocalErrors] = useState<string[]>([]);
   const [isSectionValidating, setIsSectionValidating] = useState(false);
+  const [allPassed, setAllPassed] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   const { loading, saving, stepId, data, setData, handleSaveDraft } =
     useStepData<D3FormData>("D3", {
@@ -192,7 +197,7 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
       containment_responsible: "",
     });
 
-  // ── Restore section statuses on mount ────────────────────────────────────
+  // ── Restore on mount ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!stepId) return;
     getSectionValidations(stepId)
@@ -214,7 +219,7 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
       .catch(() => {});
   }, [stepId]);
 
-  // ── Sync ChatCoach when switching sections ────────────────────────────────
+  // ── Sync ChatCoach on section switch ───────────────────────────────────────
   useEffect(() => {
     const key = SECTIONS.find((s) => s.id === currentSection)!.key;
     const stored = sectionValidations[key];
@@ -234,6 +239,25 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
       language_detected: "en",
     });
   }, [currentSection, sectionValidations]);
+
+  // ── 3-second countdown then navigate ──────────────────────────────────────
+  useEffect(() => {
+    if (!allPassed) return;
+    setCountdown(3);
+    const interval = setInterval(() => {
+      setCountdown((c) => {
+        if (c === null || c <= 1) {
+          clearInterval(interval);
+          const idx = STEPS.findIndex((s) => s.code === "D3");
+          const next = STEPS[idx + 1];
+          if (next) navigate(`/8d/${complaintId}/${next.code}`);
+          return null;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [allPassed]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const setDefected = (patch: Partial<DefectedPartStatus>) =>
@@ -294,6 +318,7 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
         if (result.all_sections_passed) {
           onRefreshSteps();
           onValidationUpdate(v);
+          setAllPassed(true);
         } else {
           const next = SECTIONS.find((s) =>
             result.remaining_sections.includes(s.key),
@@ -367,7 +392,7 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
       saving={saving}
       hideFooter
     >
-      {/* Full-screen spinner overlay during AI validation */}
+      {/* Spinner overlay */}
       {isSectionValidating && (
         <div
           style={{
@@ -381,6 +406,68 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
           }}
         >
           <ValidationSpinner stepCode="D3" />
+        </div>
+      )}
+
+      {/* All passed countdown */}
+      {allPassed && countdown !== null && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 60,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              background: "white",
+              borderRadius: 20,
+              padding: "40px 56px",
+              textAlign: "center",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+              border: "3px solid #22c55e",
+            }}
+          >
+            <div style={{ fontSize: 56, marginBottom: 12 }}>🎉</div>
+            <div
+              style={{
+                fontSize: 22,
+                fontWeight: 800,
+                color: "#15803d",
+                marginBottom: 8,
+              }}
+            >
+              D3 Fully Validated!
+            </div>
+            <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 24 }}>
+              Containment actions confirmed by the AI coach.
+            </div>
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: "50%",
+                margin: "0 auto",
+                background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 28,
+                fontWeight: 800,
+                color: "white",
+                boxShadow: "0 4px 20px rgba(34,197,94,0.4)",
+              }}
+            >
+              {countdown}
+            </div>
+            <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 12 }}>
+              Redirecting to D4 in {countdown}s…
+            </div>
+          </div>
         </div>
       )}
 
@@ -482,11 +569,12 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
         </div>
       )}
 
-      {/* ══ SECTION 1 — Defected Parts ══════════════════════════════════════ */}
+      {/* ══ SECTION 1 — CONTAINMENT (defected + suspected + alert) ══════════ */}
       {currentSection === 1 && (
         <div className="section">
+          {/* I. Defected Part Status */}
           <h3>I. Defected Part Status</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="field space-y-1">
               <label className="flex items-center gap-2 text-sm font-medium">
                 <input
@@ -554,22 +642,10 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
               )}
             </div>
           </div>
-          <SectionFooter
-            sectionKey="defected_parts"
-            status={sectionStatus.defected_parts}
-            isValidating={
-              isSectionValidating && activeSectionKey === "defected_parts"
-            }
-            onSubmit={() => handleSectionSubmit(1)}
-          />
-        </div>
-      )}
 
-      {/* ══ SECTION 2 — Suspected Parts & Alert ═════════════════════════════ */}
-      {currentSection === 2 && (
-        <div className="section">
+          {/* II. Suspected Parts */}
           <h3>II. Suspected Parts Status</h3>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto mb-6">
             <table className="table w-full">
               <thead>
                 <tr>
@@ -591,7 +667,8 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
             </table>
           </div>
 
-          <h3 className="mt-6">III. Alert Communicated To</h3>
+          {/* III. Alert */}
+          <h3>III. Alert Communicated To</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
             {(
               Object.keys(
@@ -632,18 +709,18 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
           </div>
 
           <SectionFooter
-            sectionKey="suspected_parts"
-            status={sectionStatus.suspected_parts}
+            sectionKey="containment"
+            status={sectionStatus.containment}
             isValidating={
-              isSectionValidating && activeSectionKey === "suspected_parts"
+              isSectionValidating && activeSectionKey === "containment"
             }
-            onSubmit={() => handleSectionSubmit(2)}
+            onSubmit={() => handleSectionSubmit(1)}
           />
         </div>
       )}
 
-      {/* ══ SECTION 3 — Restart & Responsible ═══════════════════════════════ */}
-      {currentSection === 3 && (
+      {/* ══ SECTION 2 — RESTART & RESPONSIBLE ═══════════════════════════════ */}
+      {currentSection === 2 && (
         <div className="section">
           <h3>IV. Restart Production</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -722,7 +799,7 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
             sectionKey="restart"
             status={sectionStatus.restart}
             isValidating={isSectionValidating && activeSectionKey === "restart"}
-            onSubmit={() => handleSectionSubmit(3)}
+            onSubmit={() => handleSectionSubmit(2)}
           />
         </div>
       )}
@@ -730,7 +807,7 @@ export default function D3({ onRefreshSteps, onValidationUpdate }: D3Props) {
   );
 }
 
-// ── Reusable section footer (same as D2) ─────────────────────────────────────
+// ── Section footer ────────────────────────────────────────────────────────────
 interface SectionFooterProps {
   sectionKey: SectionKey;
   status: SectionStatus;
@@ -753,7 +830,6 @@ function SectionFooter({ status, isValidating, onSubmit }: SectionFooterProps) {
       : status === "failed"
         ? "🔄 Fix & Re-validate"
         : "✅ Validate & Save Section";
-
   return (
     <div
       style={{
