@@ -26,6 +26,8 @@ interface ImplementationMonitoring {
   monitoring_interval: string;
   pieces_produced: number | null;
   rejection_rate: number | null;
+  shift_1_data: string;
+  shift_2_data: string;
 }
 interface ChecklistItem {
   question: string;
@@ -83,6 +85,8 @@ const DEFAULT_MONITORING: ImplementationMonitoring = {
   monitoring_interval: "",
   pieces_produced: null,
   rejection_rate: null,
+  shift_1_data: "",
+  shift_2_data: "",
 };
 
 const DEFAULT_CHECKLIST: ChecklistItem[] = DEFAULT_QUESTIONS.map((q) => ({
@@ -313,6 +317,29 @@ export default function D6({ onRefreshSteps, onValidationUpdate }: D6Props) {
   const getSectionKey = (id: number): SectionKey =>
     SECTIONS.find((s) => s.id === id)!.key;
 
+  // ── Sanitize numeric fields before sending to backend ─────────────────────
+  // Pydantic rejects "" for int/float fields — coerce to null
+  const sanitizeForSave = (d: D6FormData): D6FormData => ({
+    ...d,
+    monitoring: d.monitoring
+      ? {
+          ...d.monitoring,
+          pieces_produced:
+            d.monitoring.pieces_produced === (null as any) ||
+            d.monitoring.pieces_produced === ("" as any) ||
+            d.monitoring.pieces_produced === undefined
+              ? null
+              : Number(d.monitoring.pieces_produced),
+          rejection_rate:
+            d.monitoring.rejection_rate === (null as any) ||
+            d.monitoring.rejection_rate === ("" as any) ||
+            d.monitoring.rejection_rate === undefined
+              ? null
+              : Number(d.monitoring.rejection_rate),
+        }
+      : d.monitoring,
+  });
+
   // ── Per-section submit ─────────────────────────────────────────────────────
   const handleSectionSubmit = async (sectionId: number) => {
     const sectionKey = getSectionKey(sectionId);
@@ -323,7 +350,7 @@ export default function D6({ onRefreshSteps, onValidationUpdate }: D6Props) {
     }
     setLocalErrors([]);
 
-    if (stepId) await saveStepProgress(stepId, data);
+    if (stepId) await saveStepProgress(stepId, sanitizeForSave(data));
 
     setIsSectionValidating(true);
     setSectionStatus((p) => ({ ...p, [sectionKey]: "validating" }));
@@ -420,11 +447,16 @@ export default function D6({ onRefreshSteps, onValidationUpdate }: D6Props) {
   const numShifts = data.num_shifts ?? 3;
   const activeShifts = ALL_SHIFTS.slice(0, numShifts);
 
+  const handleSaveDraftSanitized = () => {
+    setData(sanitizeForSave(data));
+    handleSaveDraft();
+  };
+
   return (
     <StepLayout
       meta={meta}
-      onSaveDraft={handleSaveDraft}
-      onSubmit={handleSaveDraft}
+      onSaveDraft={handleSaveDraftSanitized}
+      onSubmit={handleSaveDraftSanitized}
       saving={saving}
       hideFooter
     >
@@ -831,7 +863,7 @@ export default function D6({ onRefreshSteps, onValidationUpdate }: D6Props) {
               </div>
             </div>
           </div>
-          {/* 
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             <div className="field">
               <label className="text-sm font-medium">Shift 1 data</label>
@@ -857,7 +889,7 @@ export default function D6({ onRefreshSteps, onValidationUpdate }: D6Props) {
                 }
               />
             </div>
-          </div> */}
+          </div>
 
           {/* ── Visual divider between parts ──────────────────────────────── */}
           <div
